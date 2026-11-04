@@ -3,7 +3,7 @@ import { addDays } from '../shared/dates';
 import { isAdmin } from '../shared/rules';
 import type { Priority } from '../shared/types';
 import {
-  closeDrawer, closeHelp, closePop, moveTasks, openDrawer, openHelp, openPop, setPage, setPriority, setView, toast, toggleDone,
+  closeConnect, closeDrawer, closeHelp, closePop, moveTasks, openDrawer, openHelp, openPop, setPage, setPriority, setView, toast, toggleDone,
 } from './actions';
 import { openMove } from './components/rows';
 import { curNav, focusNav, navEls, trapTab } from './focus';
@@ -86,6 +86,7 @@ export function onKeyDown(e: KeyboardEvent) {
   const isQuestion = k === '?' || (k === '/' && e.shiftKey);
 
   if (s.projEdit) { if (k === 'Tab') trapTab(e, document.querySelector('.sheet')); return; } // the editor handles Esc / Enter itself
+  if (s.connect) { if (k === 'Escape') { e.preventDefault(); closeConnect(); } else if (k === 'Tab') trapTab(e, document.querySelector('.sheet')); return; }
   if (s.help) { if (k === 'Escape' || isQuestion) { e.preventDefault(); closeHelp(); } else if (k === 'Tab') trapTab(e, document.querySelector('.help')); return; }
   if (s.pop) { popKeys(e); return; }
 

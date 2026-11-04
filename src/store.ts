@@ -50,6 +50,7 @@ export interface State {
   pop: Pop | null;
   toast: Toast | null;
   help: boolean;
+  connect: boolean;
   expanded: Record<string, boolean>;
   flash: Record<string, number>;
   draft: Draft;
@@ -95,6 +96,7 @@ export const useStore = create<State>()(() => ({
   pop: null,
   toast: null,
   help: false,
+  connect: false,
   expanded: {},
   flash: {},
   draft: emptyDraft(),

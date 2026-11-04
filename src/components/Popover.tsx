@@ -3,7 +3,7 @@ import { MONL, addDays, fmt, parseDate, toDate, weekStart } from '../../shared/d
 import { isAdmin, onProject } from '../../shared/rules';
 import { PRIORITIES, type Priority } from '../../shared/types';
 import {
-  assignable, closePop, moveTasks, removeUser, setPage, setPriority, setProject, signOut, switchablePeople, transfer,
+  assignable, closePop, moveTasks, openConnect, removeUser, setPage, setPriority, setProject, signOut, switchablePeople, transfer,
   updateUser, viewPerson,
 } from '../actions';
 import { focusLater } from '../focus';
@@ -326,6 +326,7 @@ function AccountPop({ s }: { s: State }) {
         <span><b style={{ color: 'var(--text)', display: 'block' }}>{displayName(me)}</b><span style={{ fontWeight: 400 }}>{me.email} · {me.role === 'admin' ? 'Admin' : 'Member'}</span></span>
       </div>
       <div className="pop-sep" />
+      <button className="opt" onClick={() => { closePop(false); openConnect(); }}>{I.bolt(15)}Connect an AI assistant</button>
       <button className="opt" onClick={() => void signOut()}>Sign out</button>
     </>
   );

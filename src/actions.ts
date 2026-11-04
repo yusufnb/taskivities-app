@@ -259,6 +259,17 @@ export function closeDrawer(restore = true) {
   if (restore && id) focusLater(`[data-nav="task:${id}"]`);
 }
 
+let connectReturn: string | null = null;
+export function openConnect() {
+  connectReturn = activeSelector();
+  set({ connect: true, pop: null, help: false });
+  focusLater('[data-act="copy-mcp"]');
+}
+export function closeConnect() {
+  set({ connect: false });
+  focusLater(connectReturn || '[data-act="account"]');
+}
+
 let helpReturn: string | null = null;
 export function openHelp() {
   helpReturn = activeSelector();

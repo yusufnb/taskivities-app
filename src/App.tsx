@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
-import { boot, closePop, openHelp, openPop, setPage, sync } from './actions';
+import { boot, closePop, openConnect, openHelp, openPop, setPage, sync } from './actions';
 import { Drawer } from './components/Drawer';
+import { ConnectSheet } from './components/ConnectSheet';
 import { HelpSheet } from './components/HelpSheet';
 import { Popover } from './components/Popover';
 import { Avatar, I } from './components/ui';
@@ -63,6 +64,7 @@ export function App() {
           {admin && <button className={s.page === 'team' ? 'on' : ''} data-act="page" data-pg="team" aria-current={s.page === 'team' ? 'page' : undefined} onClick={() => setPage('team')}>Team</button>}
         </nav>
         <div className="spacer" />
+        <button className="ai-btn" data-act="connect" title="Connect Claude or another AI assistant" onClick={openConnect}>{I.bolt(14)}<span>Connect AI</span></button>
         <button className="icon-btn kb-btn" title="Keyboard shortcuts  (?)" aria-label="Keyboard shortcuts" onClick={openHelp}>{I.kbd()}</button>
         <SyncPill />
         <button className="me" data-act="account" title={`${s.me.name} · ${admin ? 'Admin' : 'Member'}`} onClick={(e) => openPop({ type: 'account' }, e.currentTarget)}>
@@ -77,6 +79,7 @@ export function App() {
       </div>
       <Drawer />
       {s.help && <HelpSheet />}
+      {s.connect && <ConnectSheet />}
       {s.toast && (
         <div className={`toast ${s.toast.error ? 'err' : ''}`} role="status" key={s.toast.id}>
           <span>{s.toast.text}</span>

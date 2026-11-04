@@ -50,7 +50,7 @@ function providerFor(origin: string) {
       clientRegistrationEndpoint: '/register',
       resourceMetadata: { resource: `${origin}/mcp`, resource_name: 'Taskivities' },
       accessTokenTTL: 60 * 60,
-      refreshTokenTTL: 30 * 86400,
+      refreshTokenTTL: 365 * 86400, // an assistant connection lasts a year from approval
     });
     providers.set(origin, p);
   }

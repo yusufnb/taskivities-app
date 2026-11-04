@@ -50,7 +50,7 @@ The Worker serves a remote MCP server at `https://<your-app-host>/mcp`. In Claud
 | `transfer_task(id, to, note?)` | The new assignee must be on the task's project |
 | `project_day(project, date)` | What got finished in a project that day (by priority, then due date), plus what's still open |
 
-People and projects are given by name (or email, or "me"), not ids. Access is checked on every call, so removing someone or taking them off a project applies to their assistant at once. Access tokens last an hour; a connection lasts 30 days from approval, after which the person signs in again. Removing a person (or setting them inactive) cuts their assistant off immediately.
+People and projects are given by name (or email, or "me"), not ids. Access is checked on every call, so removing someone or taking them off a project applies to their assistant at once. Access tokens last an hour; a connection lasts a year from approval, after which the person signs in again. Removing a person (or setting them inactive) cuts their assistant off immediately.
 
 ## Run it locally
 
@@ -92,7 +92,7 @@ Useful commands: `npm run typecheck` · `npm run build` · `npm run db:migrate:l
 
 ## Not built yet
 
-- **A list of connected assistants** in the app, with a way to disconnect them. For now a connection ends after 30 days, when the person is removed, or when an admin deletes its grant from the `OAUTH_KV` namespace.
+- **A list of connected assistants** in the app, with a way to disconnect them. For now a connection ends after a year, when the person is removed, or when an admin deletes its grant from the `OAUTH_KV` namespace.
 - **Invite emails.** Admins currently share the link themselves.
 - **Archiving projects** from the UI. The column exists, but there's no button yet.
 - **Automated tests.** So far everything has been checked by hand in the browser and with the API.
