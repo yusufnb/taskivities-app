@@ -1,0 +1,43 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "taskivities",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Needed by the `agents` SDK (MCP server).
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    // The React app. Anything that isn't a file falls back to index.html (client-side routes).
+    "not_found_handling": "single-page-application",
+    // These paths always go to the Worker, never to static files.
+    // /mcp and the OAuth endpoints are for AI assistants (MCP clients); see worker/index.ts.
+    "run_worker_first": ["/api/*", "/auth/*", "/mcp", "/mcp/*", "/authorize", "/token", "/register", "/.well-known/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "taskivities",
+      // Replace with the id printed by `npx wrangler d1 create taskivities`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // One Durable Object per MCP session (the assistant's connection). See worker/mcp.ts.
+  "durable_objects": {
+    "bindings": [{ "name": "MCP_OBJECT", "class_name": "TaskivitiesMCP" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TaskivitiesMCP"] }],
+  // OAuth clients, grants and tokens for MCP clients (@cloudflare/workers-oauth-provider).
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+      // Replace with the id printed by `npx wrangler kv namespace create OAUTH_KV`.
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "vars": {
+    // "Today" (and therefore rollover) is computed in this time zone for the whole team.
+    "TEAM_TZ": "America/New_York"
+  },
+  // Secrets (set with `npx wrangler secret put NAME`): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, ADMIN_EMAILS
+  "observability": { "enabled": true }
+}
