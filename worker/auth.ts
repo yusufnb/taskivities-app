@@ -1,5 +1,6 @@
 // Google sign-in (OAuth 2.0 authorization code + PKCE) and cookie sessions.
-// Only emails that exist in `users` (added by an admin) can get in. ADMIN_EMAILS bootstraps the first admin(s).
+// Only emails that exist in `users` (added by an admin) can get in. On a brand-new install the first person
+// to sign in becomes the admin. ADMIN_EMAILS (optional) names extra addresses that are always let in as admins.
 import { Hono, type MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { USER_COLORS } from '../shared/types';
@@ -112,6 +113,21 @@ async function signIn(c: Ctx, rawEmail: string, name: string, picture: string | 
       ]);
     }
     user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<UserRow>();
+  }
+
+  if (!user) {
+    // Brand-new install: the very first person to sign in becomes the admin.
+    // One conditional INSERT, so if two people race, only one can win.
+    await db
+      .prepare(
+        `INSERT INTO users (id, email, name, avatar_url, color, role, status, added_by, added_at, last_seen_at)
+         SELECT ?, ?, ?, ?, ?, 'admin', 'active', NULL, ?, ? WHERE NOT EXISTS (SELECT 1 FROM users)`,
+      )
+      .bind(uid(), email, name, picture, USER_COLORS[Math.floor(Math.random() * USER_COLORS.length)], now, now)
+      .run();
+    // If the insert won, this person now exists (as the admin); otherwise someone else was first.
+    user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first<UserRow>();
+    if (user) await bumpDirectory(db).run();
   }
 
   if (!user || user.status === 'removed') {

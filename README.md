@@ -32,7 +32,7 @@ migrations/0001_init.sql   seed/dev.sql (local sample data)
   - Admins see every project and are the only ones who manage people and projects.
   - Members see only the projects they're on.
   - A task's assignee must always be on that task's project.
-- **Sign-in:** only email addresses added by an admin can sign in. The addresses in `ADMIN_EMAILS` become admins on their first sign-in, so the first admin can get in.
+- **Sign-in:** only email addresses added by an admin can sign in. On a brand-new install, the **first person to sign in becomes the admin** (the check is one atomic insert, so only one person can win). The optional `ADMIN_EMAILS` secret names addresses that are always let in as admins, which is useful for getting back in if you lock yourself out.
 - **Writes come only from the app's own pages:** they need the same origin plus a custom header, and the session cookie is `SameSite=Lax`. The one exception is `/mcp`, which takes an OAuth bearer token instead (see below).
 - **One set of task rules.** The REST API and the MCP tools both call `worker/tasks.ts` (`createTask`, `applyPatch`), so visibility, "assignee must be on the project" and "no past due dates" can't diverge.
 
@@ -82,10 +82,10 @@ Useful commands: `npm run typecheck` · `npm run build` · `npm run db:migrate:l
    ```bash
    npx wrangler secret put GOOGLE_CLIENT_ID
    npx wrangler secret put GOOGLE_CLIENT_SECRET
-   npx wrangler secret put ADMIN_EMAILS     # e.g. you@yourcompany.com
    ```
+   Optional: `npx wrangler secret put ADMIN_EMAILS` (comma-separated addresses that are always admins).
 7. **Deploy:** `npm run deploy`. You get `https://taskivities.<your-subdomain>.workers.dev`. To use your own domain, add it under *Workers → taskivities → Settings → Domains & Routes*.
-8. Add the final `https://…/auth/callback` URL to the Google client if you haven't already. Then sign in with an `ADMIN_EMAILS` address and add your team on the **Team** page.
+8. Add the final `https://…/auth/callback` URL to the Google client if you haven't already. Then **sign in right away**: on an empty install the first person to sign in becomes the admin. Add your team on the **Team** page.
 9. **Connect an assistant:** in Claude, add a custom connector with `https://<your-app-host>/mcp` and sign in. Nothing else to configure: assistants sign in through the same Google client.
 
 `DEV_LOGIN` is never set in production, so the development sign-in route returns 404 there.
