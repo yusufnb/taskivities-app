@@ -17,10 +17,10 @@ The design reference is [`docs/wireframes.html`](docs/wireframes.html). Open it 
 
 ```
 worker/   index.ts (routes + OAuth provider) · auth.ts (Google + sessions) · api.ts (REST: tasks, sync) · tasks.ts (task rules shared by REST and MCP)
-          mcp.ts (MCP tools) · oauth.ts (/authorize consent page for assistants) · admin.ts (people, projects) · lib.ts
+          mcp.ts (MCP tools) · oauth.ts (/authorize consent page for assistants) · admin.ts (people, projects, settings) · settings.ts (logo) · lib.ts
 shared/   types, date helpers and rules used by both the Worker and the app
-src/      React app: pages/ (Tasks, Projects, Team, Login), components/, actions.ts (all writes), keyboard.ts, focus.ts
-migrations/ (0001 schema, 0002 time zones, 0003 repeating tasks)   seed/dev.sql (local sample data)
+src/      React app: pages/ (Tasks, Projects, Team, Settings, Login), components/, actions.ts (all writes), keyboard.ts, focus.ts
+migrations/ (0001 schema, 0002 time zones, 0003 repeating tasks, 0004 settings)   seed/dev.sql (local sample data)
 ```
 
 ## Rules the code enforces
@@ -29,6 +29,7 @@ migrations/ (0001 schema, 0002 time zones, 0003 repeating tasks)   seed/dev.sql 
 - **"Today" is each person's own today.** The browser sends its time zone with every request (`x-tz`), and the server uses it for rollover, the "can't be due in the past" check, and the day a task counts as done. It's also saved on the person, so their AI assistant uses the same zone. `TEAM_TZ` is only a fallback for someone who hasn't opened the app yet.
 - **Rollover is computed, never stored.** An open task with a past due date is shown on today, and "days late" keeps counting (`shared/rules.ts → shownOn`). There's no nightly job.
 - **Repeating tasks** (`shared/repeat.ts`, `worker/tasks.ts`):
+  - **Repeating is set when a task is created.** Afterwards the rule can be changed or stopped, but a normal task can't be turned into a repeating one, and stopping can't be undone.
   - A `series` row holds the rule (daily, weekly on chosen days, monthly by date or by "2nd Tuesday", yearly, every N, optional "after done", end date or count) and the defaults for future copies. Each copy is an ordinary task with its own history and a `series_id`.
   - **One open copy at a time.** Marking a copy done inserts the next one in the same D1 batch, guarded by "no open copy in this series", so two people finishing it at once can't create two. There's no scheduled job.
   - Missed dates aren't piled up: an unfinished copy rolls over like any task, and the next copy always lands after today.
@@ -40,6 +41,9 @@ migrations/ (0001 schema, 0002 time zones, 0003 repeating tasks)   seed/dev.sql 
   - Admins see every project and are the only ones who manage people and projects.
   - Members see only the projects they're on.
   - A task's assignee must always be on that task's project.
+- **Settings** (admins only, the **Settings** page, stored in the `settings` table):
+  - **Logo:** SVG only, up to 256 KB. Used in the top bar, on the sign-in page and as the browser tab icon; "Use the built-in logo" goes back to the default. Every change is in the audit log, and everyone's app picks it up on its next poll.
+  - Uploads are checked in the browser and again on the server: no scripts, event handlers, embedded HTML, DOCTYPEs or links to outside files. `/logo.svg` is also served with a locked-down `Content-Security-Policy` (`sandbox`, no scripts), so even opening it directly can't run anything.
 - **Sign-in:** only email addresses added by an admin can sign in. On a brand-new install, the **first person to sign in becomes the admin** (the check is one atomic insert, so only one person can win). The optional `ADMIN_EMAILS` secret names addresses that are always let in as admins, which is useful for getting back in if you lock yourself out.
 - **Writes come only from the app's own pages:** they need the same origin plus a custom header, and the session cookie is `SameSite=Lax`. The one exception is `/mcp`, which takes an OAuth bearer token instead (see below).
 - **One set of task rules.** The REST API and the MCP tools both call `worker/tasks.ts` (`createTask`, `applyPatch`), so visibility, "assignee must be on the project" and "no past due dates" can't diverge.
@@ -53,7 +57,7 @@ The Worker serves a remote MCP server at `https://<your-app-host>/mcp`. In Claud
 | `list_projects()` | Your projects: name, description, color, and who can be assigned there. The descriptions tell the assistant where tasks belong |
 | `list_tasks(user?, project?, from?, to?, status?)` | Tasks by the day the app shows them on, with the same rollover rule (`shownOn`): "today" includes carried-over tasks. Defaults to today; at most 92 days |
 | `create_task(title, project, due_date, assignee, priority, notes?, repeat?)` | All five main fields required. The tool description includes the project descriptions, so the assistant can pick the project without asking. `repeat` makes it a repeating task |
-| `update_task(id, title?, notes?, project?, due_date?, priority?, status?, repeat?, stop_repeating?, skip?)` | Only the fields given change; `status: "open"` reopens. Can start, change, stop or skip a repeat |
+| `update_task(id, title?, notes?, project?, due_date?, priority?, status?, repeat?, stop_repeating?, skip?)` | Only the fields given change; `status: "open"` reopens. On a repeating task, can change, stop or skip the repeat |
 | `complete_task(id)` | Marks it done today; for a repeating task, returns the new copy as `next_copy` |
 | `transfer_task(id, to, note?, this_only?)` | The new assignee must be on the task's project. `this_only` leaves future copies of a repeating task with the current person |
 | `project_day(project, date)` | What got finished in a project that day (by priority, then due date), plus what's still open |
@@ -84,8 +88,7 @@ Useful commands: `npm run typecheck` · `npm run build` · `npm run db:migrate:l
 2. **Sign in to Cloudflare:** `npx wrangler login`
 3. **Create the database:** `npx wrangler d1 create taskivities`, then paste the printed `database_id` into `wrangler.jsonc`.
    **Create the OAuth store for AI assistants:** `npx wrangler kv namespace create OAUTH_KV`, then paste the printed `id` into the `kv_namespaces` entry in `wrangler.jsonc`. (The MCP session Durable Object needs no setup: its binding and migration are already in `wrangler.jsonc` and are created on the first deploy.)
-4. **Optional: add your logo** as `config/logo.svg`. It replaces the built-in check mark in the top bar, on the sign-in page and as the browser tab icon. Delete the file to go back to the default. (It's a file rather than a `wrangler.jsonc` setting because Cloudflare limits each setting to 5 KB, and logos are often bigger.)
-   **Optional: set the fallback time zone** in `wrangler.jsonc` (`TEAM_TZ`, e.g. `Europe/London`). Everyone gets their own browser's time zone; this is only used for someone who hasn't opened the app yet.
+4. **Optional: set the fallback time zone** in `wrangler.jsonc` (`TEAM_TZ`, e.g. `Europe/London`). Everyone gets their own browser's time zone; this is only used for someone who hasn't opened the app yet.
 5. **Create the tables:** `npm run db:migrate:remote`
 6. **Add the secrets:**
    ```bash
@@ -94,7 +97,7 @@ Useful commands: `npm run typecheck` · `npm run build` · `npm run db:migrate:l
    ```
    Optional: `npx wrangler secret put ADMIN_EMAILS` (comma-separated addresses that are always admins).
 7. **Deploy:** `npm run deploy`. You get `https://taskivities.<your-subdomain>.workers.dev`. To use your own domain, add it under *Workers → taskivities → Settings → Domains & Routes*.
-8. Add the final `https://…/auth/callback` URL to the Google client if you haven't already. Then **sign in right away**: on an empty install the first person to sign in becomes the admin. Add your team on the **Team** page.
+8. Add the final `https://…/auth/callback` URL to the Google client if you haven't already. Then **sign in right away**: on an empty install the first person to sign in becomes the admin. Add your team on the **Team** page, and upload your logo on the **Settings** page.
 9. **Connect an assistant:** in Claude, add a custom connector with `https://<your-app-host>/mcp` and sign in. Nothing else to configure: assistants sign in through the same Google client.
 
 `DEV_LOGIN` is never set in production, so the development sign-in route returns 404 there.

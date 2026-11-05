@@ -82,6 +82,14 @@ export interface TaskEvent {
   at: string;
 }
 
+/** Settings an admin edits on the Settings page. */
+export interface AppSettings {
+  /** An uploaded logo is in use (otherwise the built-in one). */
+  customLogo: boolean;
+  /** Cache-buster for /logo.svg; changes whenever the logo does. */
+  logoVersion: string;
+}
+
 export interface Bootstrap {
   me: User;
   users: User[];
@@ -90,6 +98,7 @@ export interface Bootstrap {
   tz: string;
   version: number;
   directoryVersion: number;
+  settings: AppSettings;
 }
 
 export interface SyncResponse {

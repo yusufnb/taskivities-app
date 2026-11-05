@@ -2,9 +2,10 @@
 import { addDays, rel, weekStart } from '../shared/dates';
 import { type Repeat, describe } from '../shared/repeat';
 import { onProject } from '../shared/rules';
-import type { Bootstrap, Priority, Project, Role, SyncResponse, Task, TaskEvent, User } from '../shared/types';
+import type { AppSettings, Bootstrap, Priority, Project, Role, SyncResponse, Task, TaskEvent, User } from '../shared/types';
 import { PRIORITIES } from '../shared/types';
 import { api, ApiError } from './api';
+import { applyFavicon } from './brand';
 import { activeSelector, focusLater, selFor } from './focus';
 import { type Page, type Pop, type PopType, type State, S, emptyDraft, set } from './store';
 import { draftEffective, firstName, myProjects, sharesWith } from './util';
@@ -42,9 +43,13 @@ function applyDirectory(b: Bootstrap): Partial<State> {
   const projects = byId(b.projects);
   const viewUser = s.viewUser && users[s.viewUser] && users[s.viewUser].status === 'active' ? s.viewUser : b.me.id;
   let page = s.page;
-  if (page === 'team' && b.me.role !== 'admin') page = 'tasks';
+  if ((page === 'team' || page === 'settings') && b.me.role !== 'admin') {
+    page = 'tasks';
+    history.replaceState(null, '', '/');
+  }
+  applyFavicon(b.settings.logoVersion);
   return {
-    me: b.me, users, projects, today: b.today, tz: b.tz, dirVersion: b.directoryVersion, viewUser, page,
+    me: b.me, users, projects, today: b.today, tz: b.tz, dirVersion: b.directoryVersion, settings: b.settings, viewUser, page,
     projSel: s.projSel === 'all' || projects[s.projSel] ? s.projSel : 'all',
     projDay: s.projDay || b.today,
   };
@@ -184,7 +189,7 @@ export const toggleDone = (id: string) => {
 export const transfer = (id: string, to: string, note?: string, thisOnly?: boolean) =>
   patchTask(id, { assigneeId: to }, { note, thisOnly, toast: `Transferred to ${firstName(S().users[to])}${thisOnly ? ' (just this one)' : ''}` });
 
-/** Repeating tasks: start or change the rule (a Repeat), or stop repeating (null). Not optimistic: the server decides dates. */
+/** Repeating tasks: change the rule (a Repeat), or stop repeating for good (null). Not optimistic: the server decides dates. */
 export async function setRepeat(id: string, rule: Repeat | null) {
   const t = S().tasks[id];
   if (!t) return;
@@ -194,10 +199,10 @@ export async function setRepeat(id: string, rule: Repeat | null) {
     const { task } = await api.patch<{ task: Task }>(`/api/tasks/${id}`, { repeat: rule });
     putTask(task);
     flash([id]);
-    toast(rule ? `Repeats: ${describe(rule, task.series?.anchor ?? task.dueDate)}` : 'Stopped repeating', () => {
-      set({ toast: null });
-      void setRepeat(id, t.series?.active ? t.series.rule : null);
-    });
+    // Stopping can't be undone: a task can only start repeating when it's created.
+    const old = t.series?.active ? t.series.rule : null;
+    if (!rule) toast('Stopped repeating. This task is now a normal task.');
+    else toast(`Repeats: ${describe(rule, task.series?.anchor ?? task.dueDate)}`, old ? () => { set({ toast: null }); void setRepeat(id, old); } : undefined);
   } catch (e) {
     toastError(e);
   } finally {
@@ -331,7 +336,7 @@ export function closeHelp() {
 
 export function setPage(page: Page) {
   const s = S();
-  if (page === 'team' && s.me?.role !== 'admin') return;
+  if ((page === 'team' || page === 'settings') && s.me?.role !== 'admin') return;
   set({ page, drawer: null, pop: null, invite: null, projDay: s.projDay || s.today });
   history.replaceState(null, '', page === 'tasks' ? '/' : `/${page}`);
 }
@@ -397,3 +402,31 @@ export const assignable = (s: State, projectId: string): User[] =>
 export const switchablePeople = (s: State): User[] =>
   Object.values(s.users).filter((u) => u.status === 'active' && (u.id === s.me!.id || sharesWith(s, u)));
 export const projectList = (s: State): Project[] => myProjects(s);
+
+// ---------- app settings (admins) ----------
+function putSettings(settings: AppSettings) {
+  set({ settings });
+  applyFavicon(settings.logoVersion);
+}
+
+/** Uploads an SVG logo. Returns an error message to show next to the button, or null. */
+export async function uploadLogo(svg: string): Promise<string | null> {
+  try {
+    const r = await api.put<{ settings: AppSettings }>('/api/admin/settings/logo', { svg });
+    putSettings(r.settings);
+    toast('Logo updated');
+    return null;
+  } catch (e) {
+    return e instanceof ApiError ? e.message : 'Upload failed.';
+  }
+}
+
+export async function resetLogo() {
+  try {
+    const r = await api.del<{ settings: AppSettings }>('/api/admin/settings/logo');
+    putSettings(r.settings);
+    toast('Back to the built-in logo');
+  } catch (e) {
+    toastError(e);
+  }
+}

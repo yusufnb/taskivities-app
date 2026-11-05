@@ -55,17 +55,17 @@ export function Drawer() {
               {I.cal()} {fmt(t.status === 'done' ? t.dueDate : shownOn(t, s.today))}
               {late && <><span style={{ color: 'var(--muted)', fontSize: 12.5 }}>· due {fmt(t.dueDate)}</span> <LateBadge t={t} today={s.today} /></>}
               <span className="c">{I.chev()}</span></button></dd>
-            {(t.status === 'open' || t.series) && <>
+            {t.series && <>
               <dt>Repeats</dt>
               <dd>
-                {t.status === 'open' ? (
-                  <button className="field" data-act="repeat" title="Repeat  (R)" onClick={(e) => openPop({ type: 'repeat', mode: 'task', id: t.id }, e.currentTarget)}>
-                    {I.refresh(14)} {t.series?.active ? describe(t.series.rule, t.series.anchor) : <span className="muted">Doesn't repeat</span>}
+                {t.status === 'open' && t.series.active ? (
+                  <button className="field" data-act="repeat" title="Change or stop repeating  (R)" onClick={(e) => openPop({ type: 'repeat', mode: 'task', id: t.id }, e.currentTarget)}>
+                    {I.refresh(14)} {describe(t.series.rule, t.series.anchor)}
                     <span className="c">{I.chev()}</span></button>
                 ) : (
-                  <span className="field plain">{I.refresh(14)} {t.series!.active ? describe(t.series!.rule, t.series!.anchor) : 'Was repeating'}</span>
+                  <span className="field plain">{I.refresh(14)} {t.series.active ? describe(t.series.rule, t.series.anchor) : 'Stopped repeating'}</span>
                 )}
-                {t.series?.active && t.status === 'open' && (
+                {t.series.active && t.status === 'open' && (
                   <button className="skip-btn" data-act="skip" title="Move this copy to the next scheduled date" onClick={() => void skipTask(t.id)}>Skip this one</button>
                 )}
               </dd>

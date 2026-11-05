@@ -132,7 +132,6 @@ export async function applyPatch(env: Env, v: Viewer, id: string, b: Patch, via:
   const sets: string[] = [];
   const binds: unknown[] = [];
   const events: Parameters<typeof eventStmt>[1][] = [];
-  let pre: D1PreparedStatement[] | undefined; // run before the task update
   let undidSkip = false;
   const set = (col: string, val: unknown) => { sets.push(`${col} = ?`); binds.push(val); };
   const ev = (e: Omit<Parameters<typeof eventStmt>[1], 'taskId' | 'actorId' | 'via' | 'at'>) =>
@@ -214,21 +213,15 @@ export async function applyPatch(env: Env, v: Viewer, id: string, b: Patch, via:
         series = { ...series, active: 0 };
       }
     } else {
+      // A task can only become repeating when it's created; after that the rule can be changed or stopped, not started.
+      if (!series?.active) throw bad('Repeating is set when a task is created. Create a new repeating task instead.');
       if (!isOpen && b.status !== 'open') throw bad('Only an open task can repeat.');
       const rule = parseRule(b.repeat);
       if (rule.until && rule.until < final.due) throw bad('The repeat ends before this task is due.');
-      if (!series?.active || !sameRule(JSON.parse(series.rule), rule)) {
-        if (series) {
-          after.push(db.prepare('UPDATE series SET rule = ?, starts_on = ?, made = 1, active = 1, updated_at = ? WHERE id = ?')
-            .bind(JSON.stringify(rule), final.due, now, series.id));
-        } else {
-          const sid = uid();
-          // The series must exist before the task points at it, so this one goes first.
-          sets.push('series_id = ?'); binds.push(sid);
-          series = { id: sid, rule: '', starts_on: final.due, title: final.title, notes: final.notes, project_id: final.projectId, assignee_id: final.assigneeId, priority: final.priority, made: 1, active: 1 };
-          (pre ??= []).push(insertSeries(db, sid, rule, final.due, final, v.id, now));
-        }
-        ev({ type: series.active && series.rule ? 'repeat_changed' : 'repeat_set', to: describe(rule, final.due) });
+      if (!sameRule(JSON.parse(series.rule), rule)) {
+        after.push(db.prepare('UPDATE series SET rule = ?, starts_on = ?, made = 1, active = 1, updated_at = ? WHERE id = ?')
+          .bind(JSON.stringify(rule), final.due, now, series.id));
+        ev({ type: 'repeat_changed', to: describe(rule, final.due) });
         series = { ...series, rule: JSON.stringify(rule), starts_on: final.due, made: 1, active: 1 };
       }
     }
@@ -294,7 +287,6 @@ export async function applyPatch(env: Env, v: Viewer, id: string, b: Patch, via:
 
   if (!events.length) return { stmts: [] as D1PreparedStatement[], changed: false, nextId: null };
   const stmts = [
-    ...(pre ?? []),
     // Even with no column changes (e.g. only the repeat changed) the task is touched, so everyone's view syncs.
     db.prepare(`UPDATE tasks SET ${[...sets, 'updated_at = ?', `version = ${CURRENT_VERSION}`].join(', ')} WHERE id = ?`).bind(...binds, now, id),
     ...events.map((e) => eventStmt(db, e)),

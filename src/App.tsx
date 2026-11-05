@@ -9,6 +9,7 @@ import { afterRender, focusNav, navEls, onFocusIn } from './focus';
 import { onKeyDown } from './keyboard';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { TasksPage } from './pages/TasksPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { TeamPage } from './pages/TeamPage';
 import { S, useStore } from './store';
 
@@ -57,11 +58,12 @@ export function App() {
     <div className="app">
       <div className="topbar">
         <button className="skip" onClick={() => focusNav(navEls().find((n) => n.tabIndex === 0) || navEls()[0])}>Skip to tasks</button>
-        <div className="logo"><LogoMark />taskivities</div>
+        <div className="logo"><LogoMark version={s.settings.logoVersion} />taskivities</div>
         <nav className="topnav" aria-label="Main">
           <button className={s.page === 'tasks' ? 'on' : ''} data-act="page" data-pg="tasks" aria-current={s.page === 'tasks' ? 'page' : undefined} onClick={() => setPage('tasks')}>Tasks</button>
           <button className={s.page === 'projects' ? 'on' : ''} data-act="page" data-pg="projects" aria-current={s.page === 'projects' ? 'page' : undefined} onClick={() => setPage('projects')}>Projects</button>
           {admin && <button className={s.page === 'team' ? 'on' : ''} data-act="page" data-pg="team" aria-current={s.page === 'team' ? 'page' : undefined} onClick={() => setPage('team')}>Team</button>}
+          {admin && <button className={s.page === 'settings' ? 'on' : ''} data-act="page" data-pg="settings" aria-current={s.page === 'settings' ? 'page' : undefined} onClick={() => setPage('settings')}>Settings</button>}
         </nav>
         <div className="spacer" />
         <button className="ai-btn" data-act="connect" title="Connect Claude or another AI assistant" onClick={openConnect}>{I.bolt(14)}<span>Connect AI</span></button>
@@ -74,7 +76,7 @@ export function App() {
       </div>
       <div className="app-scroll">
         <div className={`page ${s.page === 'tasks' && s.view === 'board' ? 'wide' : ''}`}>
-          {s.page === 'team' ? <TeamPage /> : s.page === 'projects' ? <ProjectsPage /> : <TasksPage />}
+          {s.page === 'settings' ? <SettingsPage /> : s.page === 'team' ? <TeamPage /> : s.page === 'projects' ? <ProjectsPage /> : <TasksPage />}
         </div>
       </div>
       <Drawer />

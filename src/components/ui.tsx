@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { PRIORITIES, type Priority, type Project, type User } from '../../shared/types';
-import { LOGO_URL } from '../brand';
+import { logoUrl } from '../brand';
 import { displayName } from '../util';
 
 const Svg = ({ s = 16, sw = 1.6, children }: { s?: number; sw?: number; children: ReactNode }) => (
@@ -30,9 +30,9 @@ export const I = {
 };
 
 /** The app's logo: config/logo.svg if there is one, otherwise the built-in mark. */
-export function LogoMark({ big = false }: { big?: boolean }) {
-  if (LOGO_URL) return <img className={`logo-img${big ? ' big' : ''}`} src={LOGO_URL} alt="" />;
-  return <span className="logo-mark">{I.check(big ? 22 : undefined)}</span>;
+/** The team's logo (uploaded on the Settings page, or the built-in one). Outside the app (sign-in page) pass no version. */
+export function LogoMark({ big = false, version }: { big?: boolean; version?: string }) {
+  return <img className={`logo-img${big ? ' big' : ''}`} src={logoUrl(version)} alt="" />;
 }
 
 export function Avatar({ user, size = 22 }: { user: User | undefined; size?: number }) {

@@ -1,11 +1,12 @@
-// This instance's logo, from config/logo.svg (bundled at build time).
-// No file there → the built-in check-mark logo. It's also used as the browser tab icon.
-const found = import.meta.glob('../config/logo.svg', { query: '?url', import: 'default', eager: true }) as Record<string, string>;
-export const LOGO_URL: string | null = Object.values(found)[0] ?? null;
+// The logo is uploaded by an admin on the Settings page and served by the Worker at /logo.svg
+// (the built-in logo when none is uploaded). It's used in the header, the sign-in page and as the tab icon.
 
-/** Points the tab icon at the configured logo. */
-export function applyFavicon() {
-  if (!LOGO_URL) return;
+/** `version` changes whenever the logo does, so the browser never shows a stale one. */
+export const logoUrl = (version?: string) => (version ? `/logo.svg?v=${encodeURIComponent(version)}` : '/logo.svg');
+
+/** Points the browser tab icon at the current logo. */
+export function applyFavicon(version: string) {
   const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-  if (link) link.href = LOGO_URL;
+  const href = logoUrl(version);
+  if (link && link.getAttribute('href') !== href) link.setAttribute('href', href);
 }

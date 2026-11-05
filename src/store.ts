@@ -1,9 +1,9 @@
 import { create } from 'zustand';
-import type { Priority, Project, Role, Task, TaskEvent, User } from '../shared/types';
+import type { AppSettings, Priority, Project, Role, Task, TaskEvent, User } from '../shared/types';
 import { NORMAL } from '../shared/types';
 import type { Repeat } from '../shared/repeat';
 
-export type Page = 'tasks' | 'projects' | 'team';
+export type Page = 'tasks' | 'projects' | 'team' | 'settings';
 export type View = 'today' | 'list' | 'board';
 export type PopType = 'move' | 'assign' | 'prio' | 'proj' | 'person' | 'projpick' | 'urole' | 'uproj' | 'uremove' | 'account' | 'repeat';
 
@@ -38,6 +38,7 @@ export interface State {
   tz: string;
   version: number;
   dirVersion: number;
+  settings: AppSettings;
   range: { from: string; to: string } | null;
   lastSync: number;
   offline: boolean;
@@ -62,7 +63,10 @@ export interface State {
   projOpen: boolean;
 }
 
-const pageFromPath = (): Page => (location.pathname.startsWith('/projects') ? 'projects' : location.pathname.startsWith('/team') ? 'team' : 'tasks');
+const pageFromPath = (): Page => {
+  const p = location.pathname;
+  return p.startsWith('/projects') ? 'projects' : p.startsWith('/team') ? 'team' : p.startsWith('/settings') ? 'settings' : 'tasks';
+};
 const savedView = (): View => {
   const v = localStorage.getItem('tv:view');
   return v === 'today' || v === 'board' ? v : 'list';
@@ -84,6 +88,7 @@ export const useStore = create<State>()(() => ({
   tz: 'UTC',
   version: 0,
   dirVersion: 0,
+  settings: { customLogo: false, logoVersion: '0' },
   range: null,
   lastSync: Date.now(),
   offline: false,

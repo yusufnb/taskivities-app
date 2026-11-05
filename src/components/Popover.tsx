@@ -358,16 +358,22 @@ function RepeatPop({ p, s }: { p: Pop; s: State }) {
   };
   if (custom) return <CustomRepeat init={custom} base={base} onBack={() => setCustom(null)} onSave={choose} />;
   const list = presets(base);
-  const isPreset = !cur || list.some((x) => sameRule(x.rule, cur));
+  // Rules that read the same count as the same (weekly with no days = weekly on the due date's weekday).
+  const isCur = (r: Repeat) => !!cur && (sameRule(r, cur) || describe(r, anchor) === describe(cur, anchor));
+  const isPreset = !cur || list.some((x) => isCur(x.rule));
   return (
     <>
       <div className="pop-h">Repeat</div>
-      <button className={`opt ${!cur ? 'cur' : ''}`} data-act="repeat-none" onClick={() => cur && choose(null)}>
-        Doesn't repeat<span className="r">{!cur ? 'current' : ''}</span>
-      </button>
+      {qa ? (
+        <button className={`opt ${!cur ? 'cur' : ''}`} data-act="repeat-none" onClick={() => cur && choose(null)}>
+          Doesn't repeat<span className="r">{!cur ? 'current' : ''}</span>
+        </button>
+      ) : (
+        <button className="opt" data-act="repeat-none" title="It can't be turned back on" onClick={() => choose(null)}>Stop repeating</button>
+      )}
       {list.map(({ label, rule }) => (
-        <button key={label} className={`opt ${sameRule(rule, cur) ? 'cur' : ''}`} onClick={() => !sameRule(rule, cur) && choose(rule)}>
-          {I.refresh(13)}{label}<span className="r">{sameRule(rule, cur) ? 'current' : ''}</span>
+        <button key={label} className={`opt ${isCur(rule) ? 'cur' : ''}`} onClick={() => !isCur(rule) && choose(rule)}>
+          {I.refresh(13)}{label}<span className="r">{isCur(rule) ? 'current' : ''}</span>
         </button>
       ))}
       {!isPreset && <button className="opt cur">{I.refresh(13)}{describe(cur!, anchor)}<span className="r">current</span></button>}
@@ -375,7 +381,7 @@ function RepeatPop({ p, s }: { p: Pop; s: State }) {
       <button className="opt" data-act="repeat-custom" onClick={() => setCustom(cur ?? { freq: 'week', every: 1, days: [parseDate(base).getDay()] })}>
         Custom…
       </button>
-      <div className="pop-foot">Only one copy is open at a time. The next appears when this one is done.</div>
+      <div className="pop-foot">{qa ? 'Only one copy is open at a time. The next appears when this one is done.' : 'Stopping is permanent. This copy stays as a normal task.'}</div>
     </>
   );
 }
@@ -418,7 +424,7 @@ function CustomRepeat({ init, base, onBack, onSave }: { init: Repeat; base: stri
           onChange={(e) => setEvery(e.target.value.replace(/\D/g, '').slice(0, 2))} />
         <div className="seg sm" role="group" aria-label="Unit">
           {UNITS.map(([u, l]) => (
-            <button key={u} className={r.freq === u ? 'on' : ''} aria-pressed={r.freq === u} onClick={() => up({ freq: u })}>{l}</button>
+            <button key={u} className={r.freq === u ? 'on' : ''} aria-pressed={r.freq === u} onClick={() => up({ freq: u })}>{Number(every) > 1 ? l : l.slice(0, -1)}</button>
           ))}
         </div>
       </div>

@@ -6,6 +6,7 @@ import { authRoutes, requireSession, sameOrigin } from './auth';
 import { type AppEnv, type Env, HttpError } from './lib';
 import { TaskivitiesMCP } from './mcp';
 import { oauthRoutes } from './oauth';
+import { serveLogo } from './settings';
 
 // The MCP session Durable Object (bound as MCP_OBJECT in wrangler.jsonc).
 export { TaskivitiesMCP };
@@ -17,6 +18,9 @@ app.onError((err, c) => {
   console.error(err);
   return c.json({ error: 'Something went wrong. Please try again.' }, 500);
 });
+
+// The logo (header, sign-in page, browser tab icon). Public, so the sign-in page can show it.
+app.get('/logo.svg', serveLogo);
 
 app.route('/auth', authRoutes);
 // Sign-in + consent page for AI assistants connecting over MCP.

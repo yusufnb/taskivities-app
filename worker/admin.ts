@@ -1,7 +1,8 @@
-// Admin-only: people, roles, project access, projects.
+// Admin-only: people, roles, project access, projects, app settings.
 import { Hono } from 'hono';
 import { EMAIL_RE } from '../shared/rules';
 import { DESCRIPTION_MAX, PROJECT_COLORS, USER_COLORS, type Role } from '../shared/types';
+import { checkSvg, saveLogo } from './settings';
 import {
   type AppEnv, type ProjectRow, type UserRow, CURRENT_VERSION, auditStmt, bad, bumpDirectory, bumpVersion, conflict, eventStmt,
   forbidden, getUser, memberProjects, notFound, nowIso, uid,
@@ -10,7 +11,7 @@ import {
 export const admin = new Hono<AppEnv>();
 
 admin.use('*', async (c, next) => {
-  if (c.get('viewer').role !== 'admin') throw forbidden('Only admins can manage the team.');
+  if (c.get('viewer').role !== 'admin') throw forbidden('Only admins can do that.');
   await next();
 });
 
@@ -202,3 +203,11 @@ admin.patch('/projects/:id', async (c) => {
   await db.batch(stmts);
   return c.json({ ok: true });
 });
+
+// ---------- app settings ----------
+admin.put('/settings/logo', async (c) => {
+  const b = await c.req.json<{ svg?: unknown }>();
+  return c.json({ settings: await saveLogo(c.env.DB, c.get('viewer').id, checkSvg(b.svg)) });
+});
+
+admin.delete('/settings/logo', async (c) => c.json({ settings: await saveLogo(c.env.DB, c.get('viewer').id, null) }));

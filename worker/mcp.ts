@@ -284,8 +284,9 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
           'Change a task: title, notes, project, due date, priority, or status (use "open" to reopen a finished task). ' +
           "Only the fields you pass change. Due dates can't move into the past, and if the project changes the assignee must be on the new one. " +
           'Use transfer_task to change who it is assigned to, and complete_task to finish it. Every change is recorded in the task history.\n\n' +
-          'Repeating tasks (those with "repeats"): edits to the open copy carry over to future copies. Pass repeat to start or change repeating, ' +
-          'stop_repeating to stop, or skip to skip this copy (its date moves to the next scheduled one).',
+          'Repeating tasks (those with "repeats"): edits to the open copy carry over to future copies. Pass repeat to change the rule, ' +
+          'stop_repeating to stop for good, or skip to skip this copy (its date moves to the next scheduled one). ' +
+          "A task that doesn't repeat can't be made repeating: repeating is set in create_task.",
         inputSchema: {
           id: z.string().describe('Task id from list_tasks.'),
           title: z.string().min(1).max(TITLE_MAX).optional(),
@@ -294,8 +295,8 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
           due_date: dateArg.optional(),
           priority: z.enum(PRIORITY_NAMES).optional(),
           status: z.enum(['open', 'done']).optional(),
-          repeat: repeatArg.optional(),
-          stop_repeating: z.boolean().optional().describe('Stop repeating. The current copy stays as a normal task.'),
+          repeat: repeatArg.optional().describe('Repeating tasks only: the new rule.'),
+          stop_repeating: z.boolean().optional().describe("Stop repeating for good. The current copy stays as a normal task. Can't be undone."),
           skip: z.boolean().optional().describe('Repeating tasks: skip this copy. Pass on its own.'),
         },
       },

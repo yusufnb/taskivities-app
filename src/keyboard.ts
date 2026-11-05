@@ -110,10 +110,10 @@ export function onKeyDown(e: KeyboardEvent) {
 
   // ----- anywhere -----
   if (isQuestion) { e.preventDefault(); openHelp(); return; }
-  if (gPending && Date.now() - gPending < 1200 && (k === 't' || k === 'p' || (k === 'u' && isAdmin(s.me!)))) {
+  if (gPending && Date.now() - gPending < 1200 && (k === 't' || k === 'p' || ((k === 'u' || k === 's') && isAdmin(s.me!)))) {
     gPending = 0;
     e.preventDefault();
-    setPage(k === 'p' ? 'projects' : k === 'u' ? 'team' : 'tasks');
+    setPage(k === 'p' ? 'projects' : k === 'u' ? 'team' : k === 's' ? 'settings' : 'tasks');
     return;
   }
   if (k === 'g') { gPending = Date.now(); return; }
@@ -176,7 +176,7 @@ export function onKeyDown(e: KeyboardEvent) {
   const anchor = (act: 'move' | 'assign' | 'repeat') =>
     (s.drawer ? document.querySelector<HTMLElement>(`.drawer [data-act="${act}"]`) : curNav()?.querySelector<HTMLElement>(`[data-act="${act}"]`)) || curNav();
   if (k === 'd') { e.preventDefault(); const a = anchor('move'); if (a) openMove([task.id], a); return; }
-  if (k === 'r' && task.status === 'open') { e.preventDefault(); const a = anchor('repeat'); if (a) openPop({ type: 'repeat', mode: 'task', id: task.id }, a); return; }
+  if (k === 'r' && task.series?.active && task.status === 'open') { e.preventDefault(); const a = anchor('repeat'); if (a) openPop({ type: 'repeat', mode: 'task', id: task.id }, a); return; }
   if (k === 's' && task.series?.active && task.status === 'open') { e.preventDefault(); void skipTask(task.id); return; }
   if (k === 't') { e.preventDefault(); const a = anchor('assign'); if (a) openPop({ type: 'assign', mode: 'task', id: task.id }, a); return; }
   if (/^[1-4]$/.test(k)) { e.preventDefault(); const p = Number(k) as Priority; if (task.priority !== p) void setPriority(task.id, p); }

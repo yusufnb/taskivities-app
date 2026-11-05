@@ -9,11 +9,14 @@
 	],
 	"assets": {
 		// The React app. Anything that isn't a file falls back to index.html (client-side routes).
+		// Bound so the Worker can serve the built-in logo when none is uploaded.
+		"binding": "ASSETS",
 		"not_found_handling": "single-page-application",
 		// These paths always go to the Worker, never to static files.
 		// /mcp and the OAuth endpoints are for AI assistants (MCP clients); see worker/index.ts.
 		"run_worker_first": [
 			"/api/*",
+			"/logo.svg",
 			"/auth/*",
 			"/mcp",
 			"/mcp/*",
@@ -55,7 +58,7 @@
 			"id": "d6cea42600e84d269acd8a46cd8ec265"
 		}
 	],
-	// Branding: put this instance's logo in config/logo.svg (bundled at build time; no file = default logo).
+	// Branding: admins upload the logo (SVG) on the Settings page; it's stored in D1, not here.
 	"vars": {
 		// Fallback only. Each person's "today" uses their own browser's time zone; this is used until we know it.
 		"TEAM_TZ": "America/New_York"
