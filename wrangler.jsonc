@@ -1,6 +1,10 @@
+// Settings shared by every Taskivities instance, plus placeholders for local development.
+// Don't put an instance's IDs here: each deployed instance (Worker) has its own tenants/<instance>.env
+// (not committed), and `npm run deploy -- <instance>` fills them in. See tenants/example.env.
+// The placeholder IDs below only work locally; a plain `wrangler deploy` with this file fails on purpose.
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "taskivities",
+	"name": "taskivities-local",
 	"main": "worker/index.ts",
 	"compatibility_date": "2026-10-01",
 	// Needed by the `agents` SDK (MCP server).
@@ -29,8 +33,8 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "taskivities",
-			"database_id": "2d5d44bc-240e-4a31-8c44-36e88d4da4bf",
+			"database_name": "taskivities-local", // per instance: D1_DATABASE_NAME
+			"database_id": "00000000-0000-0000-0000-000000000000", // per instance: D1_DATABASE_ID
 			"migrations_dir": "migrations"
 		}
 	],
@@ -55,15 +59,17 @@
 	"kv_namespaces": [
 		{
 			"binding": "OAUTH_KV",
-			"id": "d6cea42600e84d269acd8a46cd8ec265"
+			"id": "00000000000000000000000000000000" // per instance: OAUTH_KV_ID
 		}
 	],
 	// Branding: admins upload the logo (SVG) on the Settings page; it's stored in D1, not here.
 	"vars": {
-		// Fallback only. Each person's "today" uses their own browser's time zone; this is used until we know it.
+		// Fallback only (per instance: TEAM_TZ). Each person's "today" uses their own browser's time zone;
+		// this is used until we know it.
 		"TEAM_TZ": "America/New_York"
 	},
-	// Secrets (set with `npx wrangler secret put NAME`): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and optionally ADMIN_EMAILS
+	// Secrets, per instance: `npm run tenant -- secret <instance> NAME` for GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+	// and optionally ADMIN_EMAILS. Locally they come from .dev.vars.
 	"observability": {
 		"enabled": true
 	}

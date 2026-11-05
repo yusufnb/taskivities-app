@@ -21,6 +21,7 @@ worker/   index.ts (routes + OAuth provider) · auth.ts (Google + sessions) · a
 shared/   types, date helpers and rules used by both the Worker and the app
 src/      React app: pages/ (Tasks, Projects, Team, Settings, Login), components/, actions.ts (all writes), keyboard.ts, focus.ts
 migrations/ (0001 schema, 0002 time zones, 0003 repeating tasks, 0004 settings)   seed/dev.sql (local sample data)
+scripts/tenant.mjs (per-instance deploys)   tenants/ (each instance's Cloudflare IDs; only example.env is committed)
 ```
 
 ## Rules the code enforces
@@ -75,30 +76,71 @@ npm run dev                # http://localhost:5173
 
 Open http://localhost:5173/login and use **Local development sign-in**, for example `jordan@example.com` (admin) or `sara@example.com` (member). This route only works when `DEV_LOGIN=1` is set and the request comes from localhost. Google isn't needed locally unless you want to try the real sign-in.
 
-Useful commands: `npm run typecheck` · `npm run build` · `npm run db:migrate:local`
+Useful commands: `npm run typecheck` · `npm run build` · `npm run db:migrate:local`. Local development uses `wrangler.jsonc` as it is (placeholder IDs, data under `.wrangler/state`); it doesn't need a `tenants/` file.
 
 **Trying the MCP server locally.** With `npm run dev` running, start the MCP Inspector with `npx @modelcontextprotocol/inspector`, choose *Streamable HTTP*, enter `http://localhost:5173/mcp` and connect. It opens the consent page; if you aren't signed in, use the local development sign-in there and you'll come back to it. Changes made through the Inspector show up in the app's history as "via MCP Inspector" (or whatever name the client registered with). Local OAuth data lives in the local KV under `.wrangler/state`.
 
 ## Deploy to Cloudflare
 
-1. **Create a Google OAuth client.** In Google Cloud Console, go to *APIs & Services → Credentials → Create credentials → OAuth client ID*.
-   - Type: **Web application**.
-   - Authorized redirect URIs: `https://<your-app-host>/auth/callback`, plus `http://localhost:5173/auth/callback` for local use.
-   - Consent screen: *Internal* if everyone is in your Google Workspace. Otherwise use *External* and publish it, since external people such as clients are added by email. Scopes: `openid`, `email`, `profile`.
-2. **Sign in to Cloudflare:** `npx wrangler login`
-3. **Create the database:** `npx wrangler d1 create taskivities`, then paste the printed `database_id` into `wrangler.jsonc`.
-   **Create the OAuth store for AI assistants:** `npx wrangler kv namespace create OAUTH_KV`, then paste the printed `id` into the `kv_namespaces` entry in `wrangler.jsonc`. (The MCP session Durable Object needs no setup: its binding and migration are already in `wrangler.jsonc` and are created on the first deploy.)
-4. **Optional: set the fallback time zone** in `wrangler.jsonc` (`TEAM_TZ`, e.g. `Europe/London`). Everyone gets their own browser's time zone; this is only used for someone who hasn't opened the app yet.
-5. **Create the tables:** `npm run db:migrate:remote`
-6. **Add the secrets:**
+The same code deploys to as many **instances** as you like, for example one per team or client. Each instance is its own Worker with its own database, so teams never see each other's data.
+
+What makes an instance is a small file, `tenants/<instance>.env`, which is **not committed** (`.gitignore` keeps everything in `tenants/` out except `tenants/example.env`). `wrangler.jsonc` holds only what every instance shares, plus placeholder IDs for local development, so a plain `wrangler deploy` fails rather than deploying somewhere by accident.
+
+| Value in `tenants/<instance>.env` | What it is | Where to get it |
+|---|---|---|
+| `WORKER_NAME` | The Worker; the app lives at `https://<WORKER_NAME>.<your-subdomain>.workers.dev` | You choose it (lowercase, numbers, dashes). Your subdomain is under *Workers & Pages* in the dashboard |
+| `D1_DATABASE_NAME`, `D1_DATABASE_ID` | The instance's database | Printed by `npx wrangler d1 create <name>`; for an existing one, `npx wrangler d1 list` |
+| `OAUTH_KV_ID` | Where AI assistant sign-ins are stored | Printed by `npx wrangler kv namespace create <name>`; for an existing one, `npx wrangler kv namespace list` |
+| `TEAM_TZ` (optional) | Fallback time zone, e.g. `Europe/London` | Any "TZ identifier" from the [tz database list](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) |
+| `CUSTOM_DOMAINS` (optional) | e.g. `tasks.acme.com` | A domain (zone) in the same Cloudflare account |
+| `WORKERS_DEV` (optional) | `false` to serve only on the custom domains | |
+| `CLOUDFLARE_ACCOUNT_ID` (optional) | Needed when your login can reach several accounts | `npx wrangler whoami` |
+
+[`tenants/example.env`](tenants/example.env) explains each value in more detail. Secrets (the Google client) are never in the file: they're stored encrypted in Cloudflare, per Worker.
+
+### A new instance
+
+1. **Sign in to Cloudflare:** `npx wrangler login`
+2. **Create its database and KV namespace, and the file:**
    ```bash
-   npx wrangler secret put GOOGLE_CLIENT_ID
-   npx wrangler secret put GOOGLE_CLIENT_SECRET
+   npm run tenant -- create acme --tz Europe/London
    ```
-   Optional: `npx wrangler secret put ADMIN_EMAILS` (comma-separated addresses that are always admins).
-7. **Deploy:** `npm run deploy`. You get `https://taskivities.<your-subdomain>.workers.dev`. To use your own domain, add it under *Workers → taskivities → Settings → Domains & Routes*.
-8. Add the final `https://…/auth/callback` URL to the Google client if you haven't already. Then **sign in right away**: on an empty install the first person to sign in becomes the admin. Add your team on the **Team** page, and upload your logo on the **Settings** page.
-9. **Connect an assistant:** in Claude, add a custom connector with `https://<your-app-host>/mcp` and sign in. Nothing else to configure: assistants sign in through the same Google client.
+   This creates the D1 database `taskivities-acme` and the KV namespace `taskivities-acme-oauth`, and writes `tenants/acme.env` with their IDs. Options: `--name <worker-name>` (default `taskivities-<instance>`), `--domain tasks.acme.com`, `--account <account id>`.
+   (Or create them yourself as the table above says, copy `tenants/example.env` to `tenants/acme.env` and fill it in.)
+3. **Create a Google OAuth client** at [console.cloud.google.com](https://console.cloud.google.com): *APIs & Services → Credentials → Create credentials → OAuth client ID*.
+   - Type: **Web application**.
+   - Authorized redirect URIs: `https://<WORKER_NAME>.<your-subdomain>.workers.dev/auth/callback` (and `https://<custom domain>/auth/callback` for each custom domain), plus `http://localhost:5173/auth/callback` if you also use it locally.
+   - Consent screen: *Internal* if everyone is in your Google Workspace. Otherwise use *External* and publish it, since external people such as clients are added by email. Scopes: `openid`, `email`, `profile`.
+   - One client can serve several instances: add each instance's redirect URI to it.
+4. **Add the secrets** (you paste each value when asked):
+   ```bash
+   npm run tenant -- secret acme GOOGLE_CLIENT_ID
+   ```
+   ```bash
+   npm run tenant -- secret acme GOOGLE_CLIENT_SECRET
+   ```
+   Optional: `ADMIN_EMAILS` (comma-separated addresses that are always let in as admins).
+5. **Deploy:**
+   ```bash
+   npm run deploy -- acme
+   ```
+   This creates or updates the database tables, builds the app, and deploys it to that instance's Worker. The MCP Durable Object and custom domains are set up on the first deploy.
+6. **Sign in right away:** on an empty install the first person to sign in becomes the admin. Add your team on the **Team** page, and upload your logo on the **Settings** page.
+7. **Connect an assistant:** in Claude, add a custom connector with `https://<your-app-host>/mcp` and sign in. Nothing else to configure: assistants sign in through the same Google client.
+
+### Day to day
+
+| Command | Does |
+|---|---|
+| `npm run deploy -- <instance>` | Migrate the database, build, deploy. Add `--dry-run` to build and check without deploying |
+| `npm run tenant -- list` | Lists the instances in `tenants/` |
+| `npm run db:migrate:remote -- <instance>` | Only the database migrations |
+| `npm run tenant -- secret <instance> <NAME>` | Sets a secret on that instance's Worker |
+| `npm run tenant -- wrangler <instance> <args…>` | Any other wrangler command for that instance, e.g. `tail` for live logs |
+
+With a single file in `tenants/`, the instance name can be left out. `TENANT=acme npm run deploy` works too. The script writes each instance's full config to `.wrangler/tenants/<instance>.json` (git-ignored) and runs everything against it; see `scripts/tenant.mjs`.
+
+Deploying to every instance after a code change is one command per instance; the database migrations run first each time, so instances can't end up on a newer app with an older database.
 
 `DEV_LOGIN` is never set in production, so the development sign-in route returns 404 there.
 
