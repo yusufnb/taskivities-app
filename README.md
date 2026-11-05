@@ -95,6 +95,7 @@ What makes an instance is a small file, `tenants/<instance>.env`, which is **not
 | `CUSTOM_DOMAINS` (optional) | e.g. `tasks.acme.com` | A domain (zone) in the same Cloudflare account |
 | `WORKERS_DEV` (optional) | `false` to serve only on the custom domains | |
 | `CLOUDFLARE_ACCOUNT_ID` (optional) | Needed when your login can reach several accounts | `npx wrangler whoami` |
+| `CLOUDFLARE_PROFILE` (optional) | A different Cloudflare login for this instance (e.g. a client's own account) | Create one with `npx wrangler auth create <name>`; list them with `npx wrangler auth list` |
 
 [`tenants/example.env`](tenants/example.env) explains each value in more detail. Secrets (the Google client) are never in the file: they're stored encrypted in Cloudflare, per Worker.
 
@@ -105,7 +106,7 @@ What makes an instance is a small file, `tenants/<instance>.env`, which is **not
    ```bash
    npm run tenant -- create acme --tz Europe/London
    ```
-   This creates the D1 database `taskivities-acme` and the KV namespace `taskivities-acme-oauth`, and writes `tenants/acme.env` with their IDs. Options: `--name <worker-name>` (default `taskivities-<instance>`), `--domain tasks.acme.com`, `--account <account id>`.
+   This creates the D1 database `taskivities-acme` and the KV namespace `taskivities-acme-oauth`, and writes `tenants/acme.env` with their IDs. Options: `--name <worker-name>` (default `taskivities-<instance>`), `--domain tasks.acme.com`, `--account <account id>`, `--profile <login profile>` (to create them in an account under another Cloudflare login).
    (Or create them yourself as the table above says, copy `tenants/example.env` to `tenants/acme.env` and fill it in.)
 3. **Create a Google OAuth client** at [console.cloud.google.com](https://console.cloud.google.com): *APIs & Services → Credentials → Create credentials → OAuth client ID*.
    - Type: **Web application**.

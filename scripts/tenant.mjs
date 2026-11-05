@@ -6,6 +6,7 @@
 // what all instances share, with placeholder IDs that are used for local development.
 //
 //   npm run tenant -- create <instance> [--name worker-name] [--tz Area/City] [--domain host]
+//                                       [--account <id>] [--profile <wrangler auth profile>]
 //   npm run tenant -- list
 //   npm run deploy -- <instance> [--dry-run]       migrate the database, build, deploy
 //   npm run db:migrate:remote -- <instance>
@@ -72,6 +73,7 @@ function readJsonc(file) {
 // ---------- instances ----------
 
 const NAME_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const PROFILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const instances = () =>
   existsSync(TENANTS) ? readdirSync(TENANTS).filter((f) => f.endsWith('.env') && f !== 'example.env').map((f) => f.slice(0, -4)).sort() : [];
 
@@ -101,6 +103,7 @@ function load(name) {
   need('D1_DATABASE_ID', /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, see);
   need('OAUTH_KV_ID', /^[0-9a-f]{32}$/, see);
   if (e.CLOUDFLARE_ACCOUNT_ID && !/^[0-9a-f]{32}$/.test(e.CLOUDFLARE_ACCOUNT_ID)) die(`${where}: CLOUDFLARE_ACCOUNT_ID doesn't look right. ${see}`);
+  if (e.CLOUDFLARE_PROFILE && !PROFILE_RE.test(e.CLOUDFLARE_PROFILE)) die(`${where}: CLOUDFLARE_PROFILE must be a profile name from \`npx wrangler auth list\`.`);
   if (e.TEAM_TZ) {
     try {
       new Intl.DateTimeFormat('en', { timeZone: e.TEAM_TZ });
@@ -154,8 +157,15 @@ function run(cmd, args, { env = {}, cwd = ROOT, capture = false } = {}) {
   if (r.status !== 0) die(`${relative(ROOT, cmd) || cmd} ${args.join(' ')} failed.`);
   return r.stdout ?? '';
 }
-const accountEnv = (t) => (t?.CLOUDFLARE_ACCOUNT_ID ? { CLOUDFLARE_ACCOUNT_ID: t.CLOUDFLARE_ACCOUNT_ID } : {});
-const wrangler = (t, args, opts = {}) => run(WRANGLER, args, { ...opts, env: { ...accountEnv(t), ...opts.env } });
+/**
+ * Runs wrangler as the instance's Cloudflare login and account:
+ * CLOUDFLARE_PROFILE → --profile (a named login from `wrangler auth create`), CLOUDFLARE_ACCOUNT_ID → that account.
+ */
+const wrangler = (t, args, opts = {}) =>
+  run(WRANGLER, [...args, ...(t?.CLOUDFLARE_PROFILE ? ['--profile', t.CLOUDFLARE_PROFILE] : [])], {
+    ...opts,
+    env: { ...(t?.CLOUDFLARE_ACCOUNT_ID ? { CLOUDFLARE_ACCOUNT_ID: t.CLOUDFLARE_ACCOUNT_ID } : {}), ...opts.env },
+  });
 
 function migrate(name, t, cfg) {
   console.log(`\n▸ Updating the ${t.WORKER_NAME} database`);
@@ -183,7 +193,9 @@ function create(name, opts) {
   if (existsSync(file)) die(`tenants/${name}.env already exists.`);
   const worker = opts.name || `taskivities-${name}`;
   if (!NAME_RE.test(worker)) die(`"${worker}" can't be a Worker name: lowercase letters, numbers and dashes.`);
-  const acct = opts.account ? { CLOUDFLARE_ACCOUNT_ID: opts.account } : undefined;
+  if (opts.account && !/^[0-9a-f]{32}$/.test(opts.account)) die('--account must be a 32-character account ID (see `npx wrangler whoami`).');
+  if (opts.profile && !PROFILE_RE.test(opts.profile)) die('--profile must be a profile name from `npx wrangler auth list`.');
+  const acct = { CLOUDFLARE_ACCOUNT_ID: opts.account || '', CLOUDFLARE_PROFILE: opts.profile || '' };
   // Run from an empty folder so wrangler can't offer to edit wrangler.jsonc.
   const scratch = mkdtempSync(join(tmpdir(), 'taskivities-'));
   try {
@@ -212,6 +224,7 @@ function create(name, opts) {
         `CUSTOM_DOMAINS=${opts.domain || ''}`,
         `WORKERS_DEV=true`,
         `CLOUDFLARE_ACCOUNT_ID=${opts.account || ''}`,
+        `CLOUDFLARE_PROFILE=${opts.profile || ''}`,
         '',
       ].join('\n'),
     );
@@ -246,7 +259,8 @@ switch (cmd) {
   case 'list':
     for (const n of instances()) {
       const t = parseEnv(join(TENANTS, `${n}.env`));
-      console.log(`${n.padEnd(20)} ${t.WORKER_NAME ?? '?'}${t.CUSTOM_DOMAINS ? `  (${t.CUSTOM_DOMAINS})` : ''}`);
+      const extra = [t.CUSTOM_DOMAINS, t.CLOUDFLARE_PROFILE && `profile ${t.CLOUDFLARE_PROFILE}`].filter(Boolean).join(', ');
+      console.log(`${n.padEnd(20)} ${t.WORKER_NAME ?? '?'}${extra ? `  (${extra})` : ''}`);
     }
     if (!instances().length) console.log('No instances yet. Create one with: npm run tenant -- create <instance>');
     break;
@@ -276,10 +290,13 @@ switch (cmd) {
     const named = instances().includes(raw[0]);
     const n = pick(named ? raw[0] : undefined);
     const t = load(n);
-    wrangler(t, [...raw.slice(named ? 1 : 0), '--config', generate(n, t)]);
+    const args = raw.slice(named ? 1 : 0);
+    if (args[0] === 'whoami' && t.CLOUDFLARE_PROFILE)
+      die(`wrangler whoami only shows your default login, not profiles. To check the "${t.CLOUDFLARE_PROFILE}" login, try: npm run tenant -- wrangler ${n} d1 list`);
+    wrangler(t, [...args, '--config', generate(n, t)]);
     break;
   }
   default:
-    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 15).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+    console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1).filter((l, i, all) => all.slice(0, i + 1).every((x) => x.startsWith('//'))).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
     process.exit(cmd ? 1 : 0);
 }
