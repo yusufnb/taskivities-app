@@ -1,10 +1,11 @@
 import { create } from 'zustand';
 import type { Priority, Project, Role, Task, TaskEvent, User } from '../shared/types';
 import { NORMAL } from '../shared/types';
+import type { Repeat } from '../shared/repeat';
 
 export type Page = 'tasks' | 'projects' | 'team';
 export type View = 'today' | 'list' | 'board';
-export type PopType = 'move' | 'assign' | 'prio' | 'proj' | 'person' | 'projpick' | 'urole' | 'uproj' | 'uremove' | 'account';
+export type PopType = 'move' | 'assign' | 'prio' | 'proj' | 'person' | 'projpick' | 'urole' | 'uproj' | 'uremove' | 'account' | 'repeat';
 
 export interface Pop {
   type: PopType;
@@ -21,7 +22,7 @@ export interface Pop {
 }
 
 export interface Toast { id: number; text: string; undo?: () => void; error?: boolean }
-export interface Draft { title: string; notes: string; open: boolean; projectId: string | null; dueDate: string | null; assigneeId: string | null; priority: Priority }
+export interface Draft { title: string; notes: string; open: boolean; projectId: string | null; dueDate: string | null; assigneeId: string | null; priority: Priority; repeat: Repeat | null }
 export interface InviteDraft { emails: string; role: Role; projects: string[]; err: string | null; busy?: boolean }
 export interface ProjEdit { id: string | null; name: string; color: string; description: string; members: string[]; err: string | null; returnSel: string | null; busy?: boolean }
 
@@ -68,7 +69,7 @@ const savedView = (): View => {
 };
 
 export const emptyDraft = (projectId: string | null = null): Draft => ({
-  title: '', notes: '', open: false, projectId, dueDate: null, assigneeId: null, priority: NORMAL,
+  title: '', notes: '', open: false, projectId, dueDate: null, assigneeId: null, priority: NORMAL, repeat: null,
 });
 
 export const useStore = create<State>()(() => ({

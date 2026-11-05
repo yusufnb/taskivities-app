@@ -3,7 +3,7 @@ import { addDays } from '../shared/dates';
 import { isAdmin } from '../shared/rules';
 import type { Priority } from '../shared/types';
 import {
-  closeConnect, closeDrawer, closeHelp, closePop, moveTasks, openDrawer, openHelp, openPop, setPage, setPriority, setView, toast, toggleDone,
+  closeConnect, closeDrawer, closeHelp, closePop, moveTasks, openDrawer, openHelp, openPop, setPage, setPriority, setView, skipTask, toast, toggleDone,
 } from './actions';
 import { openMove } from './components/rows';
 import { curNav, focusNav, navEls, trapTab } from './focus';
@@ -163,15 +163,21 @@ export function onKeyDown(e: KeyboardEvent) {
   if (((k === 'ArrowRight' && free) || k === 'l') && !s.drawer) { if (stepColumn(1)) e.preventDefault(); return; }
   if (((k === 'ArrowLeft' && free) || k === 'h') && !s.drawer) { if (stepColumn(-1)) e.preventDefault(); return; }
 
+  // ----- upcoming copies (previews) only open the real task -----
+  const navKey = curNav()?.dataset.nav || '';
+  if (navKey.startsWith('preview:') && !s.drawer && (k === 'Enter' || k === 'o')) { e.preventDefault(); openDrawer(navKey.split(':')[1]); return; }
+
   // ----- actions on the selected task -----
   if (!task) return;
   const isDiv = onNav && t.tagName === 'DIV';
   if ((k === 'Enter' && isDiv && !s.drawer) || (k === 'o' && !s.drawer)) { e.preventDefault(); openDrawer(task.id); return; }
   if (k === 'e') { e.preventDefault(); openDrawer(task.id, true); return; }
   if (k === 'x' || (k === ' ' && (isDiv || t.classList.contains('drawer')))) { e.preventDefault(); toggleDone(task.id); return; }
-  const anchor = (act: 'move' | 'assign') =>
+  const anchor = (act: 'move' | 'assign' | 'repeat') =>
     (s.drawer ? document.querySelector<HTMLElement>(`.drawer [data-act="${act}"]`) : curNav()?.querySelector<HTMLElement>(`[data-act="${act}"]`)) || curNav();
   if (k === 'd') { e.preventDefault(); const a = anchor('move'); if (a) openMove([task.id], a); return; }
+  if (k === 'r' && task.status === 'open') { e.preventDefault(); const a = anchor('repeat'); if (a) openPop({ type: 'repeat', mode: 'task', id: task.id }, a); return; }
+  if (k === 's' && task.series?.active && task.status === 'open') { e.preventDefault(); void skipTask(task.id); return; }
   if (k === 't') { e.preventDefault(); const a = anchor('assign'); if (a) openPop({ type: 'assign', mode: 'task', id: task.id }, a); return; }
   if (/^[1-4]$/.test(k)) { e.preventDefault(); const p = Number(k) as Priority; if (task.priority !== p) void setPriority(task.id, p); }
 }

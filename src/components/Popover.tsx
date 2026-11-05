@@ -1,9 +1,10 @@
-import { useLayoutEffect, useRef } from 'react';
-import { MONL, addDays, fmt, parseDate, toDate, weekStart } from '../../shared/dates';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { DOW, MONL, addDays, fmt, parseDate, toDate, weekStart } from '../../shared/dates';
+import { type Freq, type Repeat, cleanRepeat, describe, presets, sameRule } from '../../shared/repeat';
 import { isAdmin, onProject } from '../../shared/rules';
 import { PRIORITIES, type Priority } from '../../shared/types';
 import {
-  assignable, closePop, moveTasks, openConnect, removeUser, setPage, setPriority, setProject, signOut, switchablePeople, transfer,
+  assignable, closePop, defaultDraftDate, moveTasks, openConnect, removeUser, setPage, setPriority, setProject, setRepeat, signOut, switchablePeople, transfer,
   updateUser, viewPerson,
 } from '../actions';
 import { focusLater } from '../focus';
@@ -62,6 +63,7 @@ function Content({ p, s }: { p: Pop; s: State }) {
     case 'uproj': return <UserProjectsPop p={p} s={s} />;
     case 'uremove': return <RemovePop p={p} s={s} />;
     case 'account': return <AccountPop s={s} />;
+    case 'repeat': return <RepeatPop p={p} s={s} />;
   }
 }
 
@@ -122,6 +124,8 @@ function AssignPop({ p, s }: { p: Pop; s: State }) {
   const pid = qa ? draftEffective(s).projectId : t?.projectId;
   const cur = qa ? draftEffective(s).assigneeId : t?.assigneeId;
   const noteRef = useRef<HTMLInputElement>(null);
+  const onlyRef = useRef<HTMLInputElement>(null);
+  const repeating = !!t?.series?.active && t.status === 'open';
   if (!pid) return <div className="pop-body">Pick a project first.</div>;
   const q = (p.q || '').toLowerCase();
   const list = assignable(s, pid)
@@ -129,9 +133,10 @@ function AssignPop({ p, s }: { p: Pop; s: State }) {
     .sort((a, b) => displayName(a).localeCompare(displayName(b)));
   const choose = (u: string) => {
     const note = noteRef.current?.value.trim();
+    const thisOnly = !!onlyRef.current?.checked;
     closePop(true);
     if (qa) setDraft({ assigneeId: u });
-    else void transfer(p.id!, u, note);
+    else void transfer(p.id!, u, note, thisOnly);
   };
   return (
     <>
@@ -152,6 +157,12 @@ function AssignPop({ p, s }: { p: Pop; s: State }) {
         <><div className="pop-sep" /><div style={{ padding: '2px 4px' }}>
           <input className="pin" ref={noteRef} placeholder="Add a note for the history (optional)" style={{ margin: 0 }} />
         </div></>
+      )}
+      {repeating && (
+        <label className="pop-check">
+          <input type="checkbox" ref={onlyRef} />
+          <span>Just this one. Future copies stay with {firstName(s.users[t!.series!.assigneeId])}.</span>
+        </label>
       )}
     </>
   );
@@ -329,5 +340,135 @@ function AccountPop({ s }: { s: State }) {
       <button className="opt" onClick={() => { closePop(false); openConnect(); }}>{I.bolt(15)}Connect an AI assistant</button>
       <button className="opt" onClick={() => void signOut()}>Sign out</button>
     </>
+  );
+}
+
+// ---------- repeating tasks ----------
+function RepeatPop({ p, s }: { p: Pop; s: State }) {
+  const qa = p.mode === 'qa';
+  const t = qa ? null : s.tasks[p.id!];
+  const base = qa ? s.draft.dueDate || defaultDraftDate(s) : t?.dueDate ?? s.today;
+  const cur: Repeat | null = qa ? s.draft.repeat : t?.series?.active ? t.series.rule : null;
+  const anchor = !qa && t?.series?.active ? t.series.anchor : base;
+  const [custom, setCustom] = useState<Repeat | null>(null);
+  const choose = (r: Repeat | null) => {
+    closePop(true);
+    if (qa) setDraft({ repeat: r });
+    else if (!sameRule(r, cur)) void setRepeat(p.id!, r);
+  };
+  if (custom) return <CustomRepeat init={custom} base={base} onBack={() => setCustom(null)} onSave={choose} />;
+  const list = presets(base);
+  const isPreset = !cur || list.some((x) => sameRule(x.rule, cur));
+  return (
+    <>
+      <div className="pop-h">Repeat</div>
+      <button className={`opt ${!cur ? 'cur' : ''}`} data-act="repeat-none" onClick={() => cur && choose(null)}>
+        Doesn't repeat<span className="r">{!cur ? 'current' : ''}</span>
+      </button>
+      {list.map(({ label, rule }) => (
+        <button key={label} className={`opt ${sameRule(rule, cur) ? 'cur' : ''}`} onClick={() => !sameRule(rule, cur) && choose(rule)}>
+          {I.refresh(13)}{label}<span className="r">{sameRule(rule, cur) ? 'current' : ''}</span>
+        </button>
+      ))}
+      {!isPreset && <button className="opt cur">{I.refresh(13)}{describe(cur!, anchor)}<span className="r">current</span></button>}
+      <div className="pop-sep" />
+      <button className="opt" data-act="repeat-custom" onClick={() => setCustom(cur ?? { freq: 'week', every: 1, days: [parseDate(base).getDay()] })}>
+        Custom…
+      </button>
+      <div className="pop-foot">Only one copy is open at a time. The next appears when this one is done.</div>
+    </>
+  );
+}
+
+const UNITS: [Freq, string][] = [['day', 'Days'], ['week', 'Weeks'], ['month', 'Months'], ['year', 'Years']];
+const WEEK = [1, 2, 3, 4, 5, 6, 0];
+
+function CustomRepeat({ init, base, onBack, onSave }: { init: Repeat; base: string; onBack: () => void; onSave: (r: Repeat) => void }) {
+  const [r, setR] = useState<Repeat>(init);
+  const [every, setEvery] = useState(String(init.every));
+  const [ends, setEnds] = useState<'never' | 'on' | 'after'>(init.until ? 'on' : init.count ? 'after' : 'never');
+  const [until, setUntil] = useState(init.until ?? addDays(base, 30));
+  const [count, setCount] = useState(String(init.count ?? 10));
+  const first = useRef<HTMLInputElement>(null);
+  useEffect(() => { first.current?.focus(); first.current?.select(); }, []);
+  const up = (x: Partial<Repeat>) => setR((o) => ({ ...o, ...x }));
+  const dow = parseDate(base).getDay();
+  const days = r.days?.length ? r.days : [dow];
+  const toggleDay = (d: number) => {
+    const next = days.includes(d) ? days.filter((x) => x !== d) : [...days, d];
+    if (next.length) up({ days: next });
+  };
+  const built = cleanRepeat({
+    ...r,
+    every: Number(every),
+    days: r.freq === 'week' ? days : undefined,
+    until: ends === 'on' ? until : null,
+    count: ends === 'after' ? Number(count) : null,
+  });
+  const err = typeof built === 'string' ? built : built.until && built.until < base ? 'The end date is before the first one.' : null;
+  const save = () => { if (!err && typeof built !== 'string') onSave(built); };
+  const d = parseDate(base);
+  const nth = Math.ceil(d.getDate() / 7);
+  return (
+    <div className="rp" onKeyDown={(e) => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT') { e.preventDefault(); save(); } }}>
+      <div className="pop-h">Custom repeat</div>
+      <div className="rp-row">
+        <span className="rp-l">Every</span>
+        <input ref={first} className="pin rp-n" inputMode="numeric" aria-label="Interval" value={every}
+          onChange={(e) => setEvery(e.target.value.replace(/\D/g, '').slice(0, 2))} />
+        <div className="seg sm" role="group" aria-label="Unit">
+          {UNITS.map(([u, l]) => (
+            <button key={u} className={r.freq === u ? 'on' : ''} aria-pressed={r.freq === u} onClick={() => up({ freq: u })}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {r.freq === 'week' && !r.afterDone && (
+        <div className="rp-days" role="group" aria-label="On these days">
+          {WEEK.map((x) => (
+            <button key={x} className={days.includes(x) ? 'on' : ''} aria-pressed={days.includes(x)} aria-label={DOW[x]} onClick={() => toggleDay(x)}>{DOW[x].slice(0, 2)}</button>
+          ))}
+        </div>
+      )}
+      {r.freq === 'month' && !r.afterDone && (
+        <div className="rp-row">
+          <span className="rp-l">On</span>
+          <div className="seg sm" role="group" aria-label="Day of the month">
+            <button className={r.monthBy !== 'weekday' ? 'on' : ''} aria-pressed={r.monthBy !== 'weekday'} onClick={() => up({ monthBy: 'date' })}>Day {d.getDate()}</button>
+            <button className={r.monthBy === 'weekday' ? 'on' : ''} aria-pressed={r.monthBy === 'weekday'} onClick={() => up({ monthBy: 'weekday' })}>
+              {nth >= 5 ? 'Last' : ['1st', '2nd', '3rd', '4th'][nth - 1]} {DOW[dow]}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="rp-row">
+        <span className="rp-l">Next one</span>
+        <div className="seg sm" role="group" aria-label="Count from">
+          <button className={!r.afterDone ? 'on' : ''} aria-pressed={!r.afterDone} onClick={() => up({ afterDone: false })}>On schedule</button>
+          <button className={r.afterDone ? 'on' : ''} aria-pressed={!!r.afterDone} onClick={() => up({ afterDone: true })}>After done</button>
+        </div>
+      </div>
+      <div className="rp-row">
+        <span className="rp-l">Ends</span>
+        <div className="seg sm" role="group" aria-label="Ends">
+          {(['never', 'on', 'after'] as const).map((x) => (
+            <button key={x} className={ends === x ? 'on' : ''} aria-pressed={ends === x} onClick={() => setEnds(x)}>{x === 'never' ? 'Never' : x === 'on' ? 'On date' : 'After'}</button>
+          ))}
+        </div>
+      </div>
+      {ends === 'on' && (
+        <div className="rp-row"><span className="rp-l" />
+          <input className="pin" type="date" aria-label="Last date" min={base} value={until} onChange={(e) => setUntil(e.target.value)} /></div>
+      )}
+      {ends === 'after' && (
+        <div className="rp-row"><span className="rp-l" />
+          <input className="pin rp-n" inputMode="numeric" aria-label="Number of times" value={count} onChange={(e) => setCount(e.target.value.replace(/\D/g, '').slice(0, 4))} />
+          <span className="rp-l">times</span></div>
+      )}
+      <div className={`rp-sum ${err ? 'err' : ''}`} role="status">{err ?? describe(built as Repeat, base)}</div>
+      <div className="rp-foot">
+        <button className="btn-ghost sm" onClick={onBack}>Back</button>
+        <button className="go sm" disabled={!!err} onClick={save}>Save</button>
+      </div>
+    </div>
   );
 }

@@ -490,3 +490,34 @@ kbd{display:inline-grid;place-items:center;min-width:21px;height:21px;padding:0 
 .ai-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:12.5px;font-weight:500;color:#6941C6;background:#F4EBFF}
 .ai-btn:hover{background:#EBDDFF}
 @media (max-width:640px){ .ai-btn span{display:none} .ai-btn{padding:6px} }
+
+/* ---------- repeating tasks ---------- */
+.rep{display:inline-flex;vertical-align:-1px;margin-left:6px;color:var(--faint)}
+.row.preview,.tcard.preview{opacity:.55;cursor:pointer}
+.row.preview:hover,.tcard.preview:hover{opacity:.8}
+.tcard.preview{border-style:dashed;box-shadow:none;cursor:pointer}
+.chk.pv{display:grid;place-items:center;border-style:dashed;color:var(--faint);pointer-events:none}
+.pv-tag{font-size:11.5px;color:var(--faint);white-space:nowrap}
+.skip-btn{margin-left:4px;font-size:12px;color:var(--accent);font-weight:500;padding:4px 6px;border-radius:6px}
+.skip-btn:hover{background:#F3F3F8}
+.fields dd{display:flex;align-items:center;flex-wrap:wrap}
+.field .muted{color:var(--faint)}
+.field.plain{color:var(--muted)}
+.dr-hint{font-size:12px;color:var(--faint);margin:-4px 0 12px}
+.pop-check{display:flex;gap:8px;align-items:flex-start;padding:8px 10px 4px;font-size:12px;color:var(--muted);cursor:pointer}
+.pop-check input{margin-top:2px;accent-color:var(--accent)}
+.pop:has(.rp){width:328px}
+.rp{padding:0 4px 2px}
+.rp-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.rp-l{font-size:12.5px;color:var(--muted);min-width:62px}
+.pop input.pin.rp-n{width:46px;margin:0;text-align:center}
+.pop input.pin[type=date]{margin:0;width:auto}
+.rp .seg button{padding:5px 8px;font-size:12px}
+.rp-days{display:flex;gap:4px;margin:6px 0 6px 70px}
+.rp-days button{width:30px;height:28px;border-radius:7px;font-size:12px;font-weight:500;background:#F3F3F8;color:var(--muted)}
+.rp-days button.on{background:var(--accent);color:#fff}
+.rp-sum{margin:10px 0 2px;padding:8px 10px;border-radius:8px;background:#F7F7FA;font-size:12.5px;color:var(--text)}
+.rp-sum.err{background:#FEF3F2;color:#B42318}
+.rp-foot{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
+.rp .go{padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;font-size:12.5px}
+.rp .go:disabled{opacity:.5}

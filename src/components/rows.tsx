@@ -1,6 +1,7 @@
 import type { DragEvent } from 'react';
 import { diffDays, fmt, rel } from '../../shared/dates';
 import { isLate, shownOn } from '../../shared/rules';
+import { describe } from '../../shared/repeat';
 import type { Task } from '../../shared/types';
 import { openDrawer, openPop, toggleDone } from '../actions';
 import { useStore } from '../store';
@@ -67,7 +68,7 @@ export function TaskRow({ t, ctx }: { t: Task; ctx: RowCtx }) {
         onClick={() => (ghost ? openDrawer(t.id) : toggleDone(t.id))}>{I.check()}</button>
       <div className="row-main" data-act="open" onClick={() => openDrawer(t.id)}>
         {(!done || report) && <PrioTag p={t.priority} />}
-        <div className="row-title">{t.title}</div>
+        <div className="row-title">{t.title}{!done && t.series?.active && <RepeatMark t={t} />}</div>
       </div>
       <div className="meta">{meta}</div>
       {!done && !ghost && (
@@ -107,12 +108,44 @@ export function TaskCard({ t, side }: { t: Task; side: 'to' | 'by' }) {
       data-nav={`task:${t.id}`} tabIndex={-1} aria-label={ariaFor(t, today)} draggable={!done} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <button className="chk" tabIndex={-1} data-act="toggle" title={done ? 'Mark not done' : 'Mark done'} onClick={() => toggleDone(t.id)}>{I.check()}</button>
       <div className="tc-body" data-act="open" onClick={() => openDrawer(t.id)}>
-        <div className="tc-title">{!done && <PrioTag p={t.priority} />}{t.title}</div>
+        <div className="tc-title">{!done && <PrioTag p={t.priority} />}{t.title}{!done && t.series?.active && <RepeatMark t={t} />}</div>
         <div className="tc-meta">
           <span className="tc-proj"><i style={{ background: p?.color }} />{p?.name}</span>
           {late && <LateBadge t={t} today={today} />}
           {who && <span title={`${side === 'by' ? 'Assigned to' : 'From'} ${users[who]?.name ?? ''}`}><Avatar user={users[who]} size={18} /></span>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+const RepeatMark = ({ t }: { t: Task }) => (
+  <span className="rep" title={`Repeats: ${describe(t.series!.rule, t.series!.anchor)}`} aria-label="Repeating">{I.refresh(11)}</span>
+);
+
+// ---------- upcoming copies of repeating tasks (previews, not saved) ----------
+const previewLabel = (t: Task, date: string) => `${t.series!.title}. Upcoming copy on ${fmt(date)}. It appears when the current one is done.`;
+
+export function PreviewRow({ t, date }: { t: Task; date: string }) {
+  const { projects } = useStore();
+  return (
+    <div className="row preview" data-nav={`preview:${t.id}:${date}`} tabIndex={-1} aria-label={previewLabel(t, date)} title="Upcoming copy" onClick={() => openDrawer(t.id)}>
+      <span className="chk pv">{I.refresh(11)}</span>
+      <div className="row-main"><div className="row-title">{t.series!.title}</div></div>
+      <div className="meta"><ProjPill p={projects[t.projectId]} /><span className="ghost-tag pv-tag">upcoming</span></div>
+    </div>
+  );
+}
+
+export function PreviewCard({ t, date }: { t: Task; date: string }) {
+  const { projects } = useStore();
+  const p = projects[t.projectId];
+  return (
+    <div className="tcard preview" data-nav={`preview:${t.id}:${date}`} tabIndex={-1} aria-label={previewLabel(t, date)} title="Upcoming copy" onClick={() => openDrawer(t.id)}>
+      <span className="chk pv">{I.refresh(11)}</span>
+      <div className="tc-body">
+        <div className="tc-title">{t.series!.title}</div>
+        <div className="tc-meta"><span className="tc-proj"><i style={{ background: p?.color }} />{p?.name}</span><span className="pv-tag">upcoming</span></div>
       </div>
     </div>
   );

@@ -4,10 +4,10 @@ import { isLate, shownOn } from '../../shared/rules';
 import type { Task } from '../../shared/types';
 import { ensureRange, moveTasks, openPop, setView, viewPerson } from '../actions';
 import { QuickAdd } from '../components/QuickAdd';
-import { TaskCard, TaskRow, drag, openMove } from '../components/rows';
+import { PreviewCard, PreviewRow, TaskCard, TaskRow, drag, openMove } from '../components/rows';
 import { Avatar, I } from '../components/ui';
 import { set, useStore, type State } from '../store';
-import { byPrioThenOldest, displayName, firstName, inRange, lateDays, sortRows, weekInfo } from '../util';
+import { type Preview, byPrioThenOldest, displayName, firstName, inRange, lateDays, previewsFor, sortRows, weekInfo } from '../util';
 
 export function TasksPage() {
   const s = useStore();
@@ -25,6 +25,7 @@ export function TasksPage() {
   const inScope = (d: string) => (TD ? d === s.today : inRange(d, w.ws, w.we));
   const byTasks = all.filter((t) => (t.createdBy === u || t.assignedBy === u) && t.assigneeId !== u && inScope(shownOn(t, s.today)));
   const openN = mine.filter((t) => t.status === 'open' && inScope(shownOn(t, s.today))).length;
+  const previews = TD ? [] : previewsFor(s, u, w.ws, w.we);
 
   return (
     <>
@@ -75,7 +76,7 @@ export function TasksPage() {
         <>
           <section className="sec">
             <div className="sec-h"><h2>Assigned to {isMe ? 'me' : firstName(person)}</h2><span className="cnt">{openN} open {TD ? 'today' : 'this week'}</span></div>
-            {(TD ? [s.today] : w.days).map((d) => <Day key={d} s={s} d={d} u={u} mine={mine} carried={carried} TD={TD} />)}
+            {(TD ? [s.today] : w.days).map((d) => <Day key={d} s={s} d={d} u={u} mine={mine} carried={carried} TD={TD} previews={previews.filter((x) => x.date === d)} />)}
             {TD && <Peek s={s} mine={mine} we={w.we} />}
           </section>
           <section className="sec">
@@ -88,7 +89,7 @@ export function TasksPage() {
   );
 }
 
-function Day({ s, d, u, mine, carried, TD }: { s: State; d: string; u: string; mine: Task[]; carried: Task[]; TD: boolean }) {
+function Day({ s, d, u, mine, carried, TD, previews }: { s: State; d: string; u: string; mine: Task[]; carried: Task[]; TD: boolean; previews: Preview[] }) {
   const dd = parseDate(d);
   const label = `${MONS[dd.getMonth()]} ${dd.getDate()}`;
   if (d < s.today) {
@@ -146,8 +147,8 @@ function Day({ s, d, u, mine, carried, TD }: { s: State; d: string; u: string; m
         </div>
       )}
       {carriedBlock}
-      {list.length > 0
-        ? <div className="card">{list.map((t) => <TaskRow key={t.id} t={t} ctx="to" />)}</div>
+      {list.length + previews.length > 0
+        ? <div className="card">{list.map((t) => <TaskRow key={t.id} t={t} ctx="to" />)}{previews.map((x) => <PreviewRow key={`pv${x.task.id}${x.date}`} t={x.task} date={x.date} />)}</div>
         : !carriedBlock && <div className="empty-day">{TD ? 'Nothing left for today. Nice.' : 'Nothing planned'}</div>}
     </div>
   );
@@ -199,6 +200,7 @@ function Board({ s, u, w }: { s: State; u: string; w: ReturnType<typeof weekInfo
   const nTo = all.filter((t) => t.assigneeId === u && inWeek(t)).length;
   const nBy = all.filter((t) => (t.createdBy === u || t.assignedBy === u) && t.assigneeId !== u && inWeek(t)).length;
   const who = isMe ? 'me' : firstName(s.users[u]);
+  const previews = side === 'to' ? previewsFor(s, u, w.ws, w.we) : [];
 
   const onDragOver = (e: DragEvent<HTMLDivElement>) => {
     if (!drag.id) return;
@@ -253,6 +255,7 @@ function Board({ s, u, w }: { s: State; u: string; w: ReturnType<typeof weekInfo
                   </div>
                 )}
                 {list.map((t) => <TaskCard key={t.id} t={t} side={side} />)}
+                {!past && previews.filter((x) => x.date === d).map((x) => <PreviewCard key={`pv${x.task.id}${x.date}`} t={x.task} date={x.date} />)}
                 {ghosts > 0 && <div className="col-note">{ghosts} carried to today →</div>}
                 {past
                   ? !list.length && !ghosts && <div className="col-note">Nothing recorded</div>

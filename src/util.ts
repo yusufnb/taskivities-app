@@ -1,6 +1,7 @@
 import { addDays, fmt, rel, weekStart, MONS } from '../shared/dates';
 import { isLate, onProject, shownOn } from '../shared/rules';
 import { NORMAL, PRIORITIES, type Project, type Task, type User } from '../shared/types';
+import { upcoming } from '../shared/repeat';
 import type { State } from './store';
 
 export const displayName = (u: User | undefined) => (!u ? 'Someone' : u.status === 'invited' || !u.name ? u.email || 'Someone' : u.name);
@@ -40,6 +41,18 @@ export const weekInfo = (s: State) => {
   return { ws, we, days, range, label };
 };
 export const inRange = (d: string, from: string, to: string) => d >= from && d <= to;
+
+/** An upcoming copy of a repeating task: calculated from the rule for the week views, never saved. */
+export interface Preview { task: Task; date: string }
+/** Upcoming copies of `u`'s repeating tasks between `from` and `to`, after each open copy. */
+export function previewsFor(s: State, u: string, from: string, to: string): Preview[] {
+  const out: Preview[] = [];
+  for (const t of Object.values(s.tasks)) {
+    if (t.status !== 'open' || !t.series?.active || t.series.assigneeId !== u) continue;
+    for (const date of upcoming(t.series, shownOn(t, s.today), to)) if (date >= from) out.push({ task: t, date });
+  }
+  return out.sort((a, b) => a.task.priority - b.task.priority);
+}
 
 export const ariaFor = (t: Task, today: string) =>
   `${t.title}. ${t.priority !== NORMAL ? PRIORITIES[t.priority].name + ' priority. ' : ''}${t.status === 'done' ? 'Done. ' : ''}${

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { rel } from '../../shared/dates';
 import { PRIORITIES } from '../../shared/types';
+import { describe } from '../../shared/repeat';
 import { createTask, defaultDraftDate, openPop } from '../actions';
 import { S, set, useStore } from '../store';
 import { draftEffective, firstName } from '../util';
@@ -72,6 +73,10 @@ export function QuickAdd() {
             <button className="chip" data-act="qa-date"
               onClick={(e) => openPop({ type: 'move', mode: 'qa', ids: [], month: due.slice(0, 8) + '01' }, e.currentTarget)}>
               {I.cal()}{rel(due, s.today)}
+            </button>
+            <button className="chip" data-act="qa-repeat" title="Repeat" aria-label={d.repeat ? `Repeats: ${describe(d.repeat, due)}` : 'Repeat'}
+              onClick={(e) => openPop({ type: 'repeat', mode: 'qa' }, e.currentTarget)}>
+              {I.refresh(13)}{d.repeat && describe(d.repeat, due)}
             </button>
             <button className="chip" data-act="qa-prio" title="Priority (start the title with ! for High, !! for Urgent)"
               onClick={(e) => openPop({ type: 'prio', mode: 'qa' }, e.currentTarget)}>

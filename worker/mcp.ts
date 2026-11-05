@@ -5,13 +5,14 @@ import { McpAgent } from 'agents/mcp';
 import { z } from 'zod';
 import { diffDays, isDate } from '../shared/dates';
 import { isLate, shownOn } from '../shared/rules';
+import { describe as describeRepeat } from '../shared/repeat';
 import { DESCRIPTION_MAX, PRIORITIES, TITLE_MAX, type Priority, type Project, type Task, type User } from '../shared/types';
 import {
   type Env, type ProjectRow, type TaskRow, type UserRow, type Viewer,
   HttpError, TASK_COLS, bad, canSeeProject, loadViewer, mapProject, mapTask, mapUser, today,
 } from './lib';
 import type { McpProps } from './oauth';
-import { createTask, loadVisibleTask, updateTask, visible } from './tasks';
+import { createTask, loadVisibleTask, updateTask, updateTaskWithNext, visible } from './tasks';
 
 const PRIORITY_NAMES = ['urgent', 'high', 'normal', 'low'] as const;
 type PriorityName = (typeof PRIORITY_NAMES)[number];
@@ -96,6 +97,7 @@ function describeTask(t: Task, dir: Directory, t0: string) {
     ...(isLate(t, t0) ? { days_late: diffDays(t0, t.dueDate) } : {}),
     ...(t.status === 'done' ? { done_on: t.doneOn, done_by: userLabel(dir, t.doneBy) } : {}),
     ...(t.notes ? { notes: t.notes } : {}),
+    ...(t.series?.active ? { repeats: describeRepeat(t.series.rule, t.series.anchor) } : {}),
   };
 }
 
@@ -103,6 +105,23 @@ const json = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON
 const fail = (message: string) => ({ isError: true, content: [{ type: 'text' as const, text: message }] });
 
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
+
+/** Repeat rule as assistants send it (snake_case), mapped to shared/repeat.ts. */
+const repeatArg = z.object({
+  freq: z.enum(['day', 'week', 'month', 'year']),
+  every: z.number().int().min(1).max(99).optional().describe('Every N days/weeks/months/years. Default 1.'),
+  days: z.array(z.number().int().min(0).max(6)).optional().describe('Weekly: weekdays, 0 = Sunday … 6 = Saturday. Default: the weekday of due_date. Every weekday = [1,2,3,4,5].'),
+  month_by: z.enum(['date', 'weekday']).optional().describe('Monthly: "date" = same day of the month as due_date (the 15th); "weekday" = same position (the 2nd Tuesday; a 5th weekday means "last").'),
+  after_done: z.boolean().optional().describe('Count the next date from when it was finished ("7 days after done") instead of a fixed schedule.'),
+  until: dateArg.optional().describe('Last possible date.'),
+  count: z.number().int().min(1).max(1000).optional().describe('Total number of copies.'),
+}).describe(
+  'Makes this a repeating task. Only one copy is open at a time: finishing it creates the next one on the next scheduled date (never in the past). ' +
+  'Missed dates are not piled up: an unfinished copy rolls over like any task. The schedule counts from due_date.',
+);
+const toRepeat = (r: z.infer<typeof repeatArg>) => ({
+  freq: r.freq, every: r.every ?? 1, days: r.days, monthBy: r.month_by, afterDone: r.after_done, until: r.until, count: r.count,
+});
 
 export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
   server = new McpServer({ name: 'Taskivities', version: '0.1.0' });
@@ -242,6 +261,7 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
           assignee: z.string().describe('Name, first name, email, or "me".'),
           priority: z.enum(PRIORITY_NAMES).describe('urgent: drop everything · high: do first · normal: the default · low: when there is time.'),
           notes: z.string().optional().describe('Optional details.'),
+          repeat: repeatArg.optional(),
         },
       },
       (args) =>
@@ -250,7 +270,7 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
           const assignee = findUser(dir, v, args.assignee);
           const task = await createTask(this.env, v, {
             title: args.title, notes: args.notes, projectId: project.id, assigneeId: assignee.id,
-            dueDate: args.due_date, priority: toPriority(args.priority),
+            dueDate: args.due_date, priority: toPriority(args.priority), repeat: args.repeat ? toRepeat(args.repeat) : undefined,
           }, this.via);
           return { created: describeTask(task, dir, t0) };
         }),
@@ -263,7 +283,9 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
         description:
           'Change a task: title, notes, project, due date, priority, or status (use "open" to reopen a finished task). ' +
           "Only the fields you pass change. Due dates can't move into the past, and if the project changes the assignee must be on the new one. " +
-          'Use transfer_task to change who it is assigned to, and complete_task to finish it. Every change is recorded in the task history.',
+          'Use transfer_task to change who it is assigned to, and complete_task to finish it. Every change is recorded in the task history.\n\n' +
+          'Repeating tasks (those with "repeats"): edits to the open copy carry over to future copies. Pass repeat to start or change repeating, ' +
+          'stop_repeating to stop, or skip to skip this copy (its date moves to the next scheduled one).',
         inputSchema: {
           id: z.string().describe('Task id from list_tasks.'),
           title: z.string().min(1).max(TITLE_MAX).optional(),
@@ -272,19 +294,25 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
           due_date: dateArg.optional(),
           priority: z.enum(PRIORITY_NAMES).optional(),
           status: z.enum(['open', 'done']).optional(),
+          repeat: repeatArg.optional(),
+          stop_repeating: z.boolean().optional().describe('Stop repeating. The current copy stays as a normal task.'),
+          skip: z.boolean().optional().describe('Repeating tasks: skip this copy. Pass on its own.'),
         },
       },
       (args) =>
         this.run(async (v, dir, t0) => {
-          const task = await updateTask(this.env, v, args.id, {
+          if (args.repeat && args.stop_repeating) throw bad('Pass repeat or stop_repeating, not both.');
+          const { task, next } = await updateTaskWithNext(this.env, v, args.id, {
             title: args.title,
             notes: args.notes,
             projectId: args.project !== undefined ? findProject(dir, args.project).id : undefined,
             dueDate: args.due_date,
             priority: args.priority ? toPriority(args.priority) : undefined,
             status: args.status,
+            repeat: args.stop_repeating ? null : args.repeat ? toRepeat(args.repeat) : undefined,
+            skip: args.skip,
           }, this.via);
-          return { updated: describeTask(task, dir, t0) };
+          return { updated: describeTask(task, dir, t0), ...(next ? { next_copy: describeTask(next, dir, t0) } : {}) };
         }),
     );
 
@@ -292,12 +320,15 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
       'complete_task',
       {
         title: 'Complete a task',
-        description: 'Mark a task as done (today, in your time zone).',
+        description: 'Mark a task as done (today, in your time zone). For a repeating task this also creates the next copy, returned as next_copy.',
         inputSchema: { id: z.string().describe('Task id from list_tasks.') },
         annotations: { idempotentHint: true },
       },
       (args) =>
-        this.run(async (v, dir, t0) => ({ completed: describeTask(await updateTask(this.env, v, args.id, { status: 'done' }, this.via), dir, t0) })),
+        this.run(async (v, dir, t0) => {
+          const { task, next } = await updateTaskWithNext(this.env, v, args.id, { status: 'done' }, this.via);
+          return { completed: describeTask(task, dir, t0), ...(next ? { next_copy: describeTask(next, dir, t0) } : {}) };
+        }),
     );
 
     this.server.registerTool(
@@ -309,13 +340,14 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
           id: z.string().describe('Task id from list_tasks.'),
           to: z.string().describe('Name, first name, email, or "me".'),
           note: z.string().max(500).optional(),
+          this_only: z.boolean().optional().describe('Repeating tasks: transfer only this copy; future copies stay with the current person.'),
         },
       },
       (args) =>
         this.run(async (v, dir, t0) => {
           await loadVisibleTask(this.env.DB, v, args.id); // "not found" before "who?"
           const to = findUser(dir, v, args.to);
-          const task = await updateTask(this.env, v, args.id, { assigneeId: to.id, note: args.note }, this.via);
+          const task = await updateTask(this.env, v, args.id, { assigneeId: to.id, note: args.note, thisOnly: args.this_only }, this.via);
           return { transferred: describeTask(task, dir, t0) };
         }),
     );

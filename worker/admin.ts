@@ -128,6 +128,8 @@ admin.delete('/users/:id', async (c) => {
       if (open.some((t) => !theirs.has(t.project_id))) throw bad(`${target.name || target.email} isn't on all of those projects.`);
     }
     stmts.push(bumpVersion(db));
+    // Their repeating tasks keep going, with the same person.
+    stmts.push(db.prepare('UPDATE series SET assignee_id = ?, updated_at = ? WHERE assignee_id = ? AND active = 1').bind(to, now, id));
     for (const t of open) {
       stmts.push(db.prepare(`UPDATE tasks SET assignee_id = ?, assigned_by = ?, updated_at = ?, version = ${CURRENT_VERSION} WHERE id = ?`).bind(to, v.id, now, t.id));
       stmts.push(eventStmt(db, { taskId: t.id, actorId: v.id, type: 'transferred', from: id, to, note: `${u.name || u.email} was removed from the team`, at: now }));

@@ -1,5 +1,6 @@
 // Everything that changes data. Edits are applied on screen first, then sent; on failure they're rolled back.
 import { addDays, rel, weekStart } from '../shared/dates';
+import { type Repeat, describe } from '../shared/repeat';
 import { onProject } from '../shared/rules';
 import type { Bootstrap, Priority, Project, Role, SyncResponse, Task, TaskEvent, User } from '../shared/types';
 import { PRIORITIES } from '../shared/types';
@@ -12,6 +13,7 @@ const pending = new Set<string>(); // tasks with an edit in flight (ignore sync 
 const mine = new Map<string, number>(); // tasks I changed recently (don't flash my own edits)
 const byId = <T extends { id: string }>(arr: T[]) => Object.fromEntries(arr.map((x) => [x.id, x]));
 const nowIso = () => new Date().toISOString();
+const lowerFirst = (x: string) => x.charAt(0).toLowerCase() + x.slice(1);
 
 // ---------- toasts + flash ----------
 let toastSeq = 0;
@@ -143,7 +145,9 @@ function optimistic(prev: Task, c: Changes): Task {
   return next;
 }
 
-export async function patchTask(id: string, c: Changes, opts: { note?: string; restore?: boolean; toast?: string; noUndo?: boolean } = {}) {
+interface PatchOpts { note?: string; restore?: boolean; toast?: string; noUndo?: boolean; thisOnly?: boolean }
+
+export async function patchTask(id: string, c: Changes, opts: PatchOpts = {}) {
   const prev = S().tasks[id];
   if (!prev) return;
   putTask(optimistic(prev, c));
@@ -151,9 +155,11 @@ export async function patchTask(id: string, c: Changes, opts: { note?: string; r
   mine.set(id, Date.now());
   flash([id]);
   try {
-    const { task } = await api.patch<{ task: Task }>(`/api/tasks/${id}`, { ...c, note: opts.note, restore: opts.restore });
+    const { task, next } = await api.patch<{ task: Task; next: Task | null }>(`/api/tasks/${id}`, { ...c, note: opts.note, restore: opts.restore, thisOnly: opts.thisOnly });
     putTask(task);
-    if (opts.toast) toast(opts.toast, opts.noUndo ? undefined : () => undo(prev, c));
+    if (next) { mine.set(next.id, Date.now()); putTask(next); }
+    const text = opts.toast && next ? `${opts.toast} · next one ${rel(next.dueDate, S().today)}` : opts.toast;
+    if (text) toast(text, opts.noUndo ? undefined : () => undo(prev, c));
   } catch (e) {
     putTask(prev);
     toastError(e);
@@ -175,8 +181,50 @@ export const toggleDone = (id: string) => {
   const done = t.status !== 'done';
   void patchTask(id, { status: done ? 'done' : 'open' }, done ? { toast: `Done: ${t.title}` } : {});
 };
-export const transfer = (id: string, to: string, note?: string) =>
-  patchTask(id, { assigneeId: to }, { note, toast: `Transferred to ${firstName(S().users[to])}` });
+export const transfer = (id: string, to: string, note?: string, thisOnly?: boolean) =>
+  patchTask(id, { assigneeId: to }, { note, thisOnly, toast: `Transferred to ${firstName(S().users[to])}${thisOnly ? ' (just this one)' : ''}` });
+
+/** Repeating tasks: start or change the rule (a Repeat), or stop repeating (null). Not optimistic: the server decides dates. */
+export async function setRepeat(id: string, rule: Repeat | null) {
+  const t = S().tasks[id];
+  if (!t) return;
+  pending.add(id);
+  mine.set(id, Date.now());
+  try {
+    const { task } = await api.patch<{ task: Task }>(`/api/tasks/${id}`, { repeat: rule });
+    putTask(task);
+    flash([id]);
+    toast(rule ? `Repeats: ${describe(rule, task.series?.anchor ?? task.dueDate)}` : 'Stopped repeating', () => {
+      set({ toast: null });
+      void setRepeat(id, t.series?.active ? t.series.rule : null);
+    });
+  } catch (e) {
+    toastError(e);
+  } finally {
+    pending.delete(id);
+  }
+}
+
+/** Repeating tasks: skip this copy; its date moves to the next scheduled one. */
+export async function skipTask(id: string) {
+  const t = S().tasks[id];
+  if (!t) return;
+  pending.add(id);
+  mine.set(id, Date.now());
+  try {
+    const { task } = await api.patch<{ task: Task }>(`/api/tasks/${id}`, { skip: true });
+    putTask(task);
+    flash([id]);
+    toast(`Skipped · next one ${rel(task.dueDate, S().today)}`, () => {
+      set({ toast: null });
+      void patchTask(id, { dueDate: t.dueDate }, { restore: true });
+    });
+  } catch (e) {
+    toastError(e);
+  } finally {
+    pending.delete(id);
+  }
+}
 export const setPriority = (id: string, p: Priority) => patchTask(id, { priority: p }, { toast: `Priority set to ${PRIORITIES[p].name}` });
 export const setProject = (id: string, p: string) => patchTask(id, { projectId: p }, { toast: `Moved to ${S().projects[p]?.name}` });
 
@@ -218,12 +266,12 @@ export async function createTask(): Promise<boolean> {
   if (!projectId) { toast("You're not on any project yet. Ask an admin to add you to one.", undefined, true); return false; }
   const due = d.dueDate || defaultDraftDate(s);
   try {
-    const { task } = await api.post<{ task: Task }>('/api/tasks', { title, notes: d.notes, projectId, assigneeId, dueDate: due, priority });
+    const { task } = await api.post<{ task: Task }>('/api/tasks', { title, notes: d.notes, projectId, assigneeId, dueDate: due, priority, repeat: d.repeat ?? undefined });
     mine.set(task.id, Date.now());
     localStorage.setItem('tv:lastProject', projectId);
     set((st) => ({ tasks: { ...st.tasks, [task.id]: task }, draft: { ...emptyDraft(projectId), open: true } }));
     flash([task.id]);
-    toast(`Added for ${assigneeId === s.me!.id ? 'you' : firstName(s.users[assigneeId])} · ${rel(due, s.today)}`);
+    toast(`Added for ${assigneeId === s.me!.id ? 'you' : firstName(s.users[assigneeId])} · ${rel(task.dueDate, s.today)}${task.series ? ` · ${lowerFirst(describe(task.series.rule, task.series.anchor))}` : ''}`);
     return true;
   } catch (e) {
     toastError(e);

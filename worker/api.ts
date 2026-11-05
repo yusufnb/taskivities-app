@@ -5,7 +5,7 @@ import {
   type AppEnv, type EventRow, type ProjectRow, type TaskRow, type UserRow,
   TASK_COLS, bad, canSeeProject, mapEvent, mapProject, mapTask, mapUser, today,
 } from './lib';
-import { type Patch, applyPatch, commit, createTask, loadVisibleTask, updateTask, visible } from './tasks';
+import { type Patch, applyPatch, commit, createTask, loadVisibleTask, updateTaskWithNext, visible } from './tasks';
 
 export const api = new Hono<AppEnv>();
 
@@ -71,7 +71,7 @@ api.get('/sync', async (c) => {
 // ---------- create ----------
 api.post('/tasks', async (c) => {
   const v = c.get('viewer');
-  const b = await c.req.json<{ title?: string; notes?: string; projectId?: string; assigneeId?: string; dueDate?: string; priority?: number }>();
+  const b = await c.req.json<{ title?: string; notes?: string; projectId?: string; assigneeId?: string; dueDate?: string; priority?: number; repeat?: unknown }>();
   // The app's defaults: assigned to me, due today, Normal priority.
   const task = await createTask(c.env, v, {
     title: b.title ?? '',
@@ -80,14 +80,15 @@ api.post('/tasks', async (c) => {
     assigneeId: b.assigneeId || v.id,
     dueDate: b.dueDate ?? today(v),
     priority: b.priority ?? 3,
+    repeat: b.repeat,
   });
   return c.json({ task }, 201);
 });
 
 // ---------- edit (every change is logged) ----------
 api.patch('/tasks/:id', async (c) => {
-  const task = await updateTask(c.env, c.get('viewer'), c.req.param('id'), await c.req.json<Patch>());
-  return c.json({ task });
+  // `next`: the new copy, when this finished a repeating task.
+  return c.json(await updateTaskWithNext(c.env, c.get('viewer'), c.req.param('id'), await c.req.json<Patch>()));
 });
 
 /** Move several tasks to one date (the "Move all" for carried-over tasks). */

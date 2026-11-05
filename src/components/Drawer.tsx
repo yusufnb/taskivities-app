@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { addDays, fmt } from '../../shared/dates';
 import { isLate, shownOn } from '../../shared/rules';
+import { describe } from '../../shared/repeat';
 import { PRIORITIES, type Priority, type TaskEvent } from '../../shared/types';
-import { closeDrawer, loadEvents, openPop, patchTask, toggleDone } from '../actions';
+import { closeDrawer, loadEvents, openPop, patchTask, skipTask, toggleDone } from '../actions';
 import { useStore, type State } from '../store';
 import { displayName, firstName, stamp } from '../util';
 import { openMove, LateBadge } from './rows';
@@ -54,6 +55,21 @@ export function Drawer() {
               {I.cal()} {fmt(t.status === 'done' ? t.dueDate : shownOn(t, s.today))}
               {late && <><span style={{ color: 'var(--muted)', fontSize: 12.5 }}>· due {fmt(t.dueDate)}</span> <LateBadge t={t} today={s.today} /></>}
               <span className="c">{I.chev()}</span></button></dd>
+            {(t.status === 'open' || t.series) && <>
+              <dt>Repeats</dt>
+              <dd>
+                {t.status === 'open' ? (
+                  <button className="field" data-act="repeat" title="Repeat  (R)" onClick={(e) => openPop({ type: 'repeat', mode: 'task', id: t.id }, e.currentTarget)}>
+                    {I.refresh(14)} {t.series?.active ? describe(t.series.rule, t.series.anchor) : <span className="muted">Doesn't repeat</span>}
+                    <span className="c">{I.chev()}</span></button>
+                ) : (
+                  <span className="field plain">{I.refresh(14)} {t.series!.active ? describe(t.series!.rule, t.series!.anchor) : 'Was repeating'}</span>
+                )}
+                {t.series?.active && t.status === 'open' && (
+                  <button className="skip-btn" data-act="skip" title="Move this copy to the next scheduled date" onClick={() => void skipTask(t.id)}>Skip this one</button>
+                )}
+              </dd>
+            </>}
             <dt>Priority</dt>
             <dd><button className="field" data-act="prio" onClick={(e) => openPop({ type: 'prio', mode: 'task', id: t.id }, e.currentTarget)}>
               <PrioIcon p={t.priority} s={15} /> {PRIORITIES[t.priority].name} <span className="c">{I.chev()}</span></button></dd>
@@ -63,6 +79,7 @@ export function Drawer() {
             <dt>Created by</dt>
             <dd className="plain"><Avatar user={creator} /> {displayName(creator)}<span style={{ color: 'var(--faint)' }}>· {stamp(t.createdAt, s.today).split(' · ')[0]}</span></dd>
           </dl>
+          {t.series?.active && t.status === 'open' && <div className="dr-hint">Changes to this copy carry over to future ones.</div>}
           <div className="lbl">Notes</div>
           <textarea data-field="notes" placeholder="Add details or links…" value={notes} onChange={(e) => setNotes(e.target.value)}
             onBlur={() => notes.trim() !== t.notes && void patchTask(t.id, { notes })} />
@@ -100,8 +117,9 @@ function EventText({ e, s }: { e: TaskEvent; s: State }) {
   const proj = (id: string | null) => (id && s.projects[id]?.name) || 'another project';
   switch (e.type) {
     case 'created': {
-      let v: { assignee?: string; due?: string; priority?: number } = {};
+      let v: { assignee?: string; due?: string; priority?: number; repeat?: boolean } = {};
       try { v = JSON.parse(e.toValue || '{}'); } catch { /* ignore */ }
+      if (v.repeat) return <>finished the previous copy, which created this one{v.assignee && v.assignee !== e.actorId && <> for <b>{name(v.assignee)}</b></>}{v.due && <> · due {fmt(v.due)}</>}</>;
       return <>created this task{v.assignee && v.assignee !== e.actorId && <> for <b>{name(v.assignee)}</b></>}{v.due && <> · due {fmt(v.due)}</>}{v.priority && v.priority !== 3 && <> · {PRIORITIES[v.priority as Priority].name} priority</>}</>;
     }
     case 'transferred': return <>transferred from <b>{name(e.fromValue)}</b> to <b>{name(e.toValue)}</b></>;
@@ -112,6 +130,10 @@ function EventText({ e, s }: { e: TaskEvent; s: State }) {
     case 'notes_edited': return <>edited notes</>;
     case 'done': return <>marked this done</>;
     case 'reopened': return <>reopened this task</>;
+    case 'repeat_set': return <>set it to repeat: <b>{e.toValue}</b></>;
+    case 'repeat_changed': return <>changed the repeat to <b>{e.toValue}</b></>;
+    case 'repeat_stopped': return <>stopped repeating</>;
+    case 'skipped': return <>skipped <b>{e.fromValue ? fmt(e.fromValue) : '?'}</b> · next one <b>{e.toValue ? fmt(e.toValue) : '?'}</b></>;
     default: return <>{e.type}</>;
   }
 }

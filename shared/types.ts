@@ -1,4 +1,5 @@
 // Types shared by the Worker (API) and the browser app.
+import type { SeriesInfo } from './repeat';
 
 export type Role = 'admin' | 'member';
 export type UserStatus = 'invited' | 'active' | 'removed';
@@ -47,6 +48,8 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   version: number;
+  /** Set when this task is a copy of a repeating task. */
+  series: SeriesInfo | null;
 }
 
 export type EventType =
@@ -58,7 +61,13 @@ export type EventType =
   | 'renamed'
   | 'notes_edited'
   | 'done'
-  | 'reopened';
+  | 'reopened'
+  /** Repeating tasks: to_value holds the rule's description. */
+  | 'repeat_set'
+  | 'repeat_changed'
+  | 'repeat_stopped'
+  /** Skipped this copy: the date moved to the next scheduled one. */
+  | 'skipped';
 
 export interface TaskEvent {
   id: string;

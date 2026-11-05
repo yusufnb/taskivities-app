@@ -20,7 +20,7 @@ worker/   index.ts (routes + OAuth provider) · auth.ts (Google + sessions) · a
           mcp.ts (MCP tools) · oauth.ts (/authorize consent page for assistants) · admin.ts (people, projects) · lib.ts
 shared/   types, date helpers and rules used by both the Worker and the app
 src/      React app: pages/ (Tasks, Projects, Team, Login), components/, actions.ts (all writes), keyboard.ts, focus.ts
-migrations/0001_init.sql   seed/dev.sql (local sample data)
+migrations/ (0001 schema, 0002 time zones, 0003 repeating tasks)   seed/dev.sql (local sample data)
 ```
 
 ## Rules the code enforces
@@ -28,6 +28,13 @@ migrations/0001_init.sql   seed/dev.sql (local sample data)
 - **Every task has a project, a due date, an assignee and a priority.** The columns are `NOT NULL`, and the API rejects any attempt to clear them.
 - **"Today" is each person's own today.** The browser sends its time zone with every request (`x-tz`), and the server uses it for rollover, the "can't be due in the past" check, and the day a task counts as done. It's also saved on the person, so their AI assistant uses the same zone. `TEAM_TZ` is only a fallback for someone who hasn't opened the app yet.
 - **Rollover is computed, never stored.** An open task with a past due date is shown on today, and "days late" keeps counting (`shared/rules.ts → shownOn`). There's no nightly job.
+- **Repeating tasks** (`shared/repeat.ts`, `worker/tasks.ts`):
+  - A `series` row holds the rule (daily, weekly on chosen days, monthly by date or by "2nd Tuesday", yearly, every N, optional "after done", end date or count) and the defaults for future copies. Each copy is an ordinary task with its own history and a `series_id`.
+  - **One open copy at a time.** Marking a copy done inserts the next one in the same D1 batch, guarded by "no open copy in this series", so two people finishing it at once can't create two. There's no scheduled job.
+  - Missed dates aren't piled up: an unfinished copy rolls over like any task, and the next copy always lands after today.
+  - **Skip** moves the open copy to the next scheduled date. Reopening a finished copy leaves the next copy in place.
+  - Edits to the open copy (title, notes, priority, project, assignee) carry forward to future copies, except a transfer marked "just this one". Date moves only affect that copy.
+  - The week views show upcoming copies as faint previews, calculated in the browser and never saved.
 - **History is append-only.** Every write updates `tasks` and inserts into `task_events` in the same D1 batch, and database triggers refuse any `UPDATE` or `DELETE` on `task_events`.
 - **Roles:**
   - Admins see every project and are the only ones who manage people and projects.
@@ -45,10 +52,10 @@ The Worker serves a remote MCP server at `https://<your-app-host>/mcp`. In Claud
 |---|---|
 | `list_projects()` | Your projects: name, description, color, and who can be assigned there. The descriptions tell the assistant where tasks belong |
 | `list_tasks(user?, project?, from?, to?, status?)` | Tasks by the day the app shows them on, with the same rollover rule (`shownOn`): "today" includes carried-over tasks. Defaults to today; at most 92 days |
-| `create_task(title, project, due_date, assignee, priority, notes?)` | All five main fields required. The tool description includes the project descriptions, so the assistant can pick the project without asking |
-| `update_task(id, title?, notes?, project?, due_date?, priority?, status?)` | Only the fields given change; `status: "open"` reopens |
-| `complete_task(id)` | Marks it done today |
-| `transfer_task(id, to, note?)` | The new assignee must be on the task's project |
+| `create_task(title, project, due_date, assignee, priority, notes?, repeat?)` | All five main fields required. The tool description includes the project descriptions, so the assistant can pick the project without asking. `repeat` makes it a repeating task |
+| `update_task(id, title?, notes?, project?, due_date?, priority?, status?, repeat?, stop_repeating?, skip?)` | Only the fields given change; `status: "open"` reopens. Can start, change, stop or skip a repeat |
+| `complete_task(id)` | Marks it done today; for a repeating task, returns the new copy as `next_copy` |
+| `transfer_task(id, to, note?, this_only?)` | The new assignee must be on the task's project. `this_only` leaves future copies of a repeating task with the current person |
 | `project_day(project, date)` | What got finished in a project that day (by priority, then due date), plus what's still open |
 
 People and projects are given by name (or email, or "me"), not ids. Access is checked on every call, so removing someone or taking them off a project applies to their assistant at once. Access tokens last an hour; a connection lasts a year from approval, after which the person signs in again. Removing a person (or setting them inactive) cuts their assistant off immediately.

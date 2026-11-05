@@ -1,6 +1,7 @@
 import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
 import type { Context } from 'hono';
 import type { Project, Task, TaskEvent, User } from '../shared/types';
+import type { SeriesInfo } from '../shared/repeat';
 import { todayIn } from '../shared/dates';
 
 export interface Env {
@@ -86,18 +87,27 @@ export const sha256hex = async (s: string) =>
   [...new Uint8Array(await sha256(s))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 // ---------- row mapping ----------
+// Always selected FROM tasks (no alias): the last column folds in the task's series, if any.
 export const TASK_COLS =
-  'id, title, notes, project_id, assignee_id, created_by, assigned_by, due_date, priority, status, done_at, done_on, done_by, created_at, updated_at, version';
+  'id, title, notes, project_id, assignee_id, created_by, assigned_by, due_date, priority, status, done_at, done_on, done_by, created_at, updated_at, version, series_id, ' +
+  "(SELECT json_object('id', s.id, 'rule', json(s.rule), 'anchor', s.starts_on, 'active', s.active, 'made', s.made, 'assigneeId', s.assignee_id, 'title', s.title) " +
+  'FROM series s WHERE s.id = tasks.series_id) AS series_json';
 
 export interface TaskRow {
   id: string; title: string; notes: string; project_id: string; assignee_id: string; created_by: string; assigned_by: string;
   due_date: string; priority: number; status: 'open' | 'done'; done_at: string | null; done_on: string | null; done_by: string | null;
-  created_at: string; updated_at: string; version: number;
+  created_at: string; updated_at: string; version: number; series_id: string | null; series_json: string | null;
 }
+const parseSeries = (j: string | null): SeriesInfo | null => {
+  if (!j) return null;
+  const s = JSON.parse(j) as SeriesInfo & { active: number | boolean };
+  return { ...s, active: !!s.active };
+};
 export const mapTask = (r: TaskRow): Task => ({
   id: r.id, title: r.title, notes: r.notes, projectId: r.project_id, assigneeId: r.assignee_id, createdBy: r.created_by,
   assignedBy: r.assigned_by, dueDate: r.due_date, priority: r.priority as Task['priority'], status: r.status, doneAt: r.done_at,
   doneOn: r.done_on, doneBy: r.done_by, createdAt: r.created_at, updatedAt: r.updated_at, version: r.version,
+  series: parseSeries(r.series_json),
 });
 
 export interface UserRow {
