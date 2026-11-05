@@ -61,7 +61,10 @@ export function TeamPage() {
                   <Avatar user={u} size={32} />
                   <div>
                     <b>{displayName(u)}{me && <span className="you"> (you)</span>}</b>
-                    <span>{u.status === 'invited' ? 'Not signed in yet' : u.email}</span>
+                    <span title={u.timeZone ? `Time zone: ${u.timeZone}` : undefined}>
+                      {u.status === 'invited' ? 'Not signed in yet' : u.email}
+                      {u.status !== 'invited' && u.timeZone && ` · ${u.timeZone.split('/').pop()!.replace(/_/g, ' ')}`}
+                    </span>
                   </div>
                 </div>
                 <div>

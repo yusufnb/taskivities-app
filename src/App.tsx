@@ -4,7 +4,7 @@ import { Drawer } from './components/Drawer';
 import { ConnectSheet } from './components/ConnectSheet';
 import { HelpSheet } from './components/HelpSheet';
 import { Popover } from './components/Popover';
-import { Avatar, I } from './components/ui';
+import { Avatar, I, LogoMark } from './components/ui';
 import { afterRender, focusNav, navEls, onFocusIn } from './focus';
 import { onKeyDown } from './keyboard';
 import { ProjectsPage } from './pages/ProjectsPage';
@@ -57,7 +57,7 @@ export function App() {
     <div className="app">
       <div className="topbar">
         <button className="skip" onClick={() => focusNav(navEls().find((n) => n.tabIndex === 0) || navEls()[0])}>Skip to tasks</button>
-        <div className="logo"><span className="logo-mark">{I.check()}</span>taskivities</div>
+        <div className="logo"><LogoMark />taskivities</div>
         <nav className="topnav" aria-label="Main">
           <button className={s.page === 'tasks' ? 'on' : ''} data-act="page" data-pg="tasks" aria-current={s.page === 'tasks' ? 'page' : undefined} onClick={() => setPage('tasks')}>Tasks</button>
           <button className={s.page === 'projects' ? 'on' : ''} data-act="page" data-pg="projects" aria-current={s.page === 'projects' ? 'page' : undefined} onClick={() => setPage('projects')}>Projects</button>
@@ -93,16 +93,9 @@ export function App() {
 }
 
 function SyncPill() {
-  const lastSync = useStore((s) => s.lastSync);
-  const [, tick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const sec = Math.floor((Date.now() - lastSync) / 1000);
   return (
     <div className="sync" title="Checks for changes every 10 seconds">
-      <span className="dot" /><span className="lbl-t">Live · </span><span className="sync-ago">{sec < 3 ? 'just now' : `synced ${sec}s ago`}</span>
+      <span className="dot" /><span className="lbl-t">Live</span>
     </div>
   );
 }

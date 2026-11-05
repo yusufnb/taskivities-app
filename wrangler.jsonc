@@ -55,8 +55,9 @@
 			"id": "d6cea42600e84d269acd8a46cd8ec265"
 		}
 	],
+	// Branding: put this instance's logo in config/logo.svg (bundled at build time; no file = default logo).
 	"vars": {
-		// "Today" (and therefore rollover) is computed in this time zone for the whole team.
+		// Fallback only. Each person's "today" uses their own browser's time zone; this is used until we know it.
 		"TEAM_TZ": "America/New_York"
 	},
 	// Secrets (set with `npx wrangler secret put NAME`): GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and optionally ADMIN_EMAILS

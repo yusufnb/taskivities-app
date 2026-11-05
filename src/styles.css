@@ -24,6 +24,8 @@ b{font-weight:600}
 .topbar{height:56px;flex:none;display:flex;align-items:center;gap:14px;padding:0 22px;background:#fff;border-bottom:1px solid var(--line)}
 .logo{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:-.01em;font-size:15.5px}
 .logo-mark{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#6366F1,#4338CA);display:grid;place-items:center;color:#fff;box-shadow:inset 0 -2px 0 rgba(0,0,0,.15)}
+.logo-img{width:26px;height:26px;display:block;flex:none;object-fit:contain}
+.logo-img.big{width:52px;height:52px;margin:0 auto 16px}
 .logo-mark.sm{width:20px;height:20px;border-radius:6px;font-size:12px}
 .spacer{flex:1}
 .sync{display:flex;align-items:center;gap:7px;white-space:nowrap;font-size:12.5px;color:var(--muted);padding:5px 10px;border-radius:999px;background:#F6F6F8}
@@ -405,7 +407,7 @@ kbd{display:inline-grid;place-items:center;min-width:21px;height:21px;padding:0 
 @media (max-width:640px){
   .topbar{padding:0 16px;height:52px}
   .page{padding:16px 14px 110px}
-  .sync .lbl-t,.sync .sync-ago{display:none}
+  .sync .lbl-t{display:none}
   .sync{padding:6px}
   .topbar{gap:8px}
   .who .h1{font-size:21px}

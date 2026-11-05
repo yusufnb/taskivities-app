@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { PRIORITIES, type Priority, type Project, type User } from '../../shared/types';
+import { LOGO_URL } from '../brand';
 import { displayName } from '../util';
 
 const Svg = ({ s = 16, sw = 1.6, children }: { s?: number; sw?: number; children: ReactNode }) => (
@@ -27,6 +28,12 @@ export const I = {
   kbd: (s = 17) => <Svg s={s}><rect x="1.5" y="4" width="13" height="8.5" rx="1.8" /><path d="M4 6.6h.01M6.7 6.6h.01M9.3 6.6h.01M12 6.6h.01M4.5 9.9h7" /></Svg>,
   trash: (s = 15) => <Svg s={s}><path d="M2.8 4.3h10.4M6.3 4.3V2.8h3.4v1.5M4.3 4.3l.6 9h6.2l.6-9" /></Svg>,
 };
+
+/** The app's logo: config/logo.svg if there is one, otherwise the built-in mark. */
+export function LogoMark({ big = false }: { big?: boolean }) {
+  if (LOGO_URL) return <img className={`logo-img${big ? ' big' : ''}`} src={LOGO_URL} alt="" />;
+  return <span className="logo-mark">{I.check(big ? 22 : undefined)}</span>;
+}
 
 export function Avatar({ user, size = 22 }: { user: User | undefined; size?: number }) {
   const name = displayName(user);

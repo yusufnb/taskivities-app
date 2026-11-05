@@ -8,7 +8,7 @@ import { isLate, shownOn } from '../shared/rules';
 import { DESCRIPTION_MAX, PRIORITIES, TITLE_MAX, type Priority, type Project, type Task, type User } from '../shared/types';
 import {
   type Env, type ProjectRow, type TaskRow, type UserRow, type Viewer,
-  HttpError, TASK_COLS, bad, canSeeProject, loadViewer, mapProject, mapTask, mapUser, today, tz,
+  HttpError, TASK_COLS, bad, canSeeProject, loadViewer, mapProject, mapTask, mapUser, today,
 } from './lib';
 import type { McpProps } from './oauth';
 import { createTask, loadVisibleTask, updateTask, visible } from './tasks';
@@ -114,7 +114,7 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
 
   /** The person this assistant acts for, loaded fresh on every call so access changes apply at once. */
   private async viewer(): Promise<Viewer> {
-    const v = this.props?.userId ? await loadViewer(this.env.DB, this.props.userId) : null;
+    const v = this.props?.userId ? await loadViewer(this.env, this.props.userId) : null;
     if (!v) throw new HttpError(401, 'Your Taskivities access has ended. Reconnect, or ask an admin to add you back.');
     return v;
   }
@@ -124,7 +124,7 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
     try {
       const v = await this.viewer();
       const dir = await loadDirectory(this.env.DB, v);
-      return json(await fn(v, dir, today(this.env)));
+      return json(await fn(v, dir, today(v)));
     } catch (e) {
       if (e instanceof HttpError) return fail(e.message);
       console.error(e);
@@ -133,12 +133,15 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
   }
 
   async init() {
-    const t0 = today(this.env);
+    let t0 = '';
+    let zone = '';
     // Project descriptions say what belongs where; folding them into create_task lets the assistant pick
     // the right project without a list_projects call. Snapshot at connect time; list_projects is always current.
     let projectGuide = '';
     try {
       const v = await this.viewer();
+      t0 = today(v);
+      zone = v.tz;
       const dir = await loadDirectory(this.env.DB, v);
       projectGuide = dir.projects
         .map((p) => `- ${p.name}: ${p.description.slice(0, DESCRIPTION_MAX).replace(/\s+/g, ' ').trim() || '(no description)'}`)
@@ -154,14 +157,14 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
         description:
           'Projects you can see, with their descriptions (what belongs in each project and how tasks are named), colors, ' +
           'and the people who can be assigned tasks there. Read the descriptions to decide which project a task belongs in. ' +
-          "Also returns today's date in the team's time zone.",
+          "Also returns today's date and your time zone (all dates are in your time zone).",
         inputSchema: {},
         annotations: { readOnlyHint: true },
       },
       () =>
         this.run(async (v, dir, today) => ({
           today,
-          time_zone: tz(this.env),
+          time_zone: v.tz,
           you: { name: dir.users.get(v.id)?.name, email: v.email, role: v.role },
           projects: dir.projects.map((p) => ({
             name: p.name,
@@ -182,7 +185,7 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
         description:
           'Tasks in your projects, grouped by the day the app shows them on. Rollover works as in the app: an open task ' +
           "whose due date has passed is shown on today (with days_late), and a task finished late is shown on the day it was finished. " +
-          'So "what is on today" includes carried-over tasks. Dates are YYYY-MM-DD in the team time zone; from defaults to today and to defaults to from ' +
+          'So "what is on today" includes carried-over tasks. Dates are YYYY-MM-DD in your time zone; from defaults to today and to defaults to from ' +
           `(at most ${MAX_RANGE_DAYS} days).`,
         inputSchema: {
           user: z.string().optional().describe('Only tasks assigned to this person: name, first name, email, or "me".'),
@@ -229,7 +232,7 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
         title: 'Create a task',
         description:
           `Create a task as the signed-in person. All five fields are required: title, project, due_date, assignee and priority. ` +
-          `The assignee must be on the project (see list_projects), and the due date can't be in the past (today is ${t0} in ${tz(this.env)} as of connecting). ` +
+          `The assignee must be on the project (see list_projects), and the due date can't be in the past (today is ${t0} in ${zone} as of connecting). ` +
           `Use "normal" priority unless the person says otherwise. Titles are at most ${TITLE_MAX} characters.\n\n` +
           `Pick the project from these descriptions (what belongs where, and how tasks are named):\n${projectGuide || '- (call list_projects)'}`,
         inputSchema: {
@@ -289,7 +292,7 @@ export class TaskivitiesMCP extends McpAgent<Env, unknown, McpProps> {
       'complete_task',
       {
         title: 'Complete a task',
-        description: 'Mark a task as done (today, in the team time zone).',
+        description: 'Mark a task as done (today, in your time zone).',
         inputSchema: { id: z.string().describe('Task id from list_tasks.') },
         annotations: { idempotentHint: true },
       },

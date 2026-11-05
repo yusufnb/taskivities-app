@@ -1,5 +1,5 @@
 // Calendar dates are plain 'YYYY-MM-DD' strings everywhere. No time zones involved
-// except todayIn(), which answers "what date is it right now for the team?".
+// except todayIn(), which answers "what date is it right now where this person is?".
 
 export const MONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

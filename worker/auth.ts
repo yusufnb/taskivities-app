@@ -5,7 +5,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { USER_COLORS } from '../shared/types';
 import {
-  type AppEnv, type Ctx, type UserRow, b64url, bumpDirectory, memberProjects, nowIso, randomToken, sha256, sha256hex, uid,
+  type AppEnv, type Ctx, type UserRow, b64url, bumpDirectory, defaultTz, nowIso, randomToken, sha256, sha256hex, toViewer, uid, validTz,
 } from './lib';
 
 const SESSION_COOKIE = 'tv_session';
@@ -187,13 +187,12 @@ export async function currentUser(c: Ctx): Promise<UserRow | null> {
 export const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {
   const row = await currentUser(c);
   if (!row) return c.json({ error: 'Signed out' }, 401);
-  c.set('viewer', {
-    id: row.id,
-    email: row.email,
-    name: row.name,
-    role: row.role,
-    projects: row.role === 'admin' ? [] : await memberProjects(c.env.DB, row.id),
-  });
+  // The app sends the browser's time zone on every request, so "today" follows people when they travel.
+  const sent = validTz(c.req.header('x-tz'));
+  // Saved for AI assistants (which don't send one) and the Team page. No directory bump: two open devices
+  // in different zones would otherwise make everyone reload the team list on every poll.
+  if (sent && sent !== row.time_zone) await c.env.DB.prepare('UPDATE users SET time_zone = ? WHERE id = ?').bind(sent, row.id).run();
+  c.set('viewer', await toViewer(c.env, row, sent || validTz(row.time_zone) || defaultTz(c.env)));
   await next();
 };
 

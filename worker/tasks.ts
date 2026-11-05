@@ -45,7 +45,7 @@ export async function createTask(env: Env, v: Viewer, b: NewTask, via: string | 
   const db = env.DB;
   const title = (b.title ?? '').trim();
   const notes = (b.notes ?? '').trim();
-  const t0 = today(env);
+  const t0 = today(v);
   if (!title) throw bad('A task needs a title.');
   if (title.length > TITLE_MAX) throw bad(`Titles can be at most ${TITLE_MAX} characters.`);
   if (notes.length > NOTES_MAX) throw bad('Notes are too long.');
@@ -90,7 +90,7 @@ export interface Patch {
 export async function applyPatch(env: Env, v: Viewer, id: string, b: Patch, via: string | null = null) {
   const db = env.DB;
   const t = await loadVisibleTask(db, v, id);
-  const t0 = today(env);
+  const t0 = today(v);
   const now = nowIso();
   const sets: string[] = [];
   const binds: unknown[] = [];

@@ -3,7 +3,7 @@ import { addDays, isDate } from '../shared/dates';
 import type { Bootstrap, SyncResponse } from '../shared/types';
 import {
   type AppEnv, type EventRow, type ProjectRow, type TaskRow, type UserRow,
-  TASK_COLS, bad, canSeeProject, mapEvent, mapProject, mapTask, mapUser, today, tz,
+  TASK_COLS, bad, canSeeProject, mapEvent, mapProject, mapTask, mapUser, today,
 } from './lib';
 import { type Patch, applyPatch, commit, createTask, loadVisibleTask, updateTask, visible } from './tasks';
 
@@ -37,14 +37,14 @@ api.get('/bootstrap', async (c) => {
   const me = all.find((u) => u.id === v.id)!;
   // Removed people stay in the list (history still names them) but without their email.
   const list = all.map((u) => (u.status === 'removed' ? { ...u, email: '' } : u));
-  const body: Bootstrap = { me, users: list, projects: visibleProjects.map(mapProject), today: today(c.env), tz: tz(c.env), ...meta };
+  const body: Bootstrap = { me, users: list, projects: visibleProjects.map(mapProject), today: today(v), tz: v.tz, ...meta };
   return c.json(body);
 });
 
 // ---------- tasks in a window (plus every open task) ----------
 api.get('/tasks', async (c) => {
   const v = c.get('viewer');
-  const t0 = today(c.env);
+  const t0 = today(v);
   const from = isDate(c.req.query('from')) ? c.req.query('from')! : addDays(t0, -60);
   const to = isDate(c.req.query('to')) ? c.req.query('to')! : addDays(t0, 365);
   const vis = visible(v);
@@ -60,7 +60,7 @@ api.get('/sync', async (c) => {
   const v = c.get('viewer');
   const since = Number(c.req.query('since') ?? 0);
   const meta = await getMeta(c.env.DB);
-  const base = { version: meta.version, directoryVersion: meta.directoryVersion, today: today(c.env) };
+  const base = { version: meta.version, directoryVersion: meta.directoryVersion, today: today(v) };
   if (meta.version <= since) return c.json({ changed: false, ...base } satisfies SyncResponse);
   const { results } = await c.env.DB.prepare(`SELECT ${TASK_COLS} FROM tasks WHERE version > ?`).bind(since).all<TaskRow>();
   const tasks = results.filter((r) => canSeeProject(v, r.project_id)).map(mapTask);
@@ -78,7 +78,7 @@ api.post('/tasks', async (c) => {
     notes: b.notes,
     projectId: b.projectId ?? '',
     assigneeId: b.assigneeId || v.id,
-    dueDate: b.dueDate ?? today(c.env),
+    dueDate: b.dueDate ?? today(v),
     priority: b.priority ?? 3,
   });
   return c.json({ task }, 201);

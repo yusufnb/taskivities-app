@@ -4,13 +4,22 @@ export class ApiError extends Error {
   }
 }
 
+/** This browser's time zone. The server uses it for "today" (rollover, past dates, done-on day). */
+const TZ = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch {
+    return '';
+  }
+})();
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
       method,
       credentials: 'same-origin',
-      headers: { 'x-taskivities': '1', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
+      headers: { 'x-taskivities': '1', ...(TZ ? { 'x-tz': TZ } : {}), ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {

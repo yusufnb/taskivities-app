@@ -15,6 +15,8 @@ export interface User {
   /** Project ids this member belongs to (empty for admins: they are on every project). */
   projects: string[];
   addedAt: string;
+  /** IANA time zone from their browser (null until they've opened the app). */
+  timeZone: string | null;
 }
 
 export interface Project {
@@ -39,7 +41,7 @@ export interface Task {
   priority: Priority;
   status: 'open' | 'done';
   doneAt: string | null;
-  /** YYYY-MM-DD in the team time zone */
+  /** YYYY-MM-DD in the time zone of whoever marked it done */
   doneOn: string | null;
   doneBy: string | null;
   createdAt: string;

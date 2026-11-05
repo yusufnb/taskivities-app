@@ -26,6 +26,7 @@ migrations/0001_init.sql   seed/dev.sql (local sample data)
 ## Rules the code enforces
 
 - **Every task has a project, a due date, an assignee and a priority.** The columns are `NOT NULL`, and the API rejects any attempt to clear them.
+- **"Today" is each person's own today.** The browser sends its time zone with every request (`x-tz`), and the server uses it for rollover, the "can't be due in the past" check, and the day a task counts as done. It's also saved on the person, so their AI assistant uses the same zone. `TEAM_TZ` is only a fallback for someone who hasn't opened the app yet.
 - **Rollover is computed, never stored.** An open task with a past due date is shown on today, and "days late" keeps counting (`shared/rules.ts → shownOn`). There's no nightly job.
 - **History is append-only.** Every write updates `tasks` and inserts into `task_events` in the same D1 batch, and database triggers refuse any `UPDATE` or `DELETE` on `task_events`.
 - **Roles:**
@@ -76,7 +77,8 @@ Useful commands: `npm run typecheck` · `npm run build` · `npm run db:migrate:l
 2. **Sign in to Cloudflare:** `npx wrangler login`
 3. **Create the database:** `npx wrangler d1 create taskivities`, then paste the printed `database_id` into `wrangler.jsonc`.
    **Create the OAuth store for AI assistants:** `npx wrangler kv namespace create OAUTH_KV`, then paste the printed `id` into the `kv_namespaces` entry in `wrangler.jsonc`. (The MCP session Durable Object needs no setup: its binding and migration are already in `wrangler.jsonc` and are created on the first deploy.)
-4. **Set the team time zone** in `wrangler.jsonc` (`TEAM_TZ`, e.g. `Europe/London`). It decides when "today" starts for everyone.
+4. **Optional: add your logo** as `config/logo.svg`. It replaces the built-in check mark in the top bar, on the sign-in page and as the browser tab icon. Delete the file to go back to the default. (It's a file rather than a `wrangler.jsonc` setting because Cloudflare limits each setting to 5 KB, and logos are often bigger.)
+   **Optional: set the fallback time zone** in `wrangler.jsonc` (`TEAM_TZ`, e.g. `Europe/London`). Everyone gets their own browser's time zone; this is only used for someone who hasn't opened the app yet.
 5. **Create the tables:** `npm run db:migrate:remote`
 6. **Add the secrets:**
    ```bash

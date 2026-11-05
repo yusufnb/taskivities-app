@@ -27,22 +27,39 @@ export interface Viewer {
   role: 'admin' | 'member';
   /** Member project ids (empty for admins). */
   projects: string[];
+  /** The viewer's own IANA time zone. "Today" is always the viewer's today. */
+  tz: string;
 }
 
 export type AppEnv = { Bindings: Env; Variables: { viewer: Viewer } };
 export type Ctx = Context<AppEnv>;
 
-export const tz = (env: Env) => env.TEAM_TZ || 'UTC';
-export const today = (env: Env) => todayIn(tz(env));
+/** Fallback for people whose browser hasn't told us their time zone yet. */
+export const defaultTz = (env: Env) => validTz(env.TEAM_TZ) || 'UTC';
+/** An IANA time zone name the runtime understands, or null. */
+export function validTz(tz: string | null | undefined): string | null {
+  if (!tz || tz.length > 64) return null;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
+}
+/** Today's date (YYYY-MM-DD) where the viewer is. */
+export const today = (v: Viewer) => todayIn(v.tz);
 export const nowIso = () => new Date().toISOString();
 export const uid = () => crypto.randomUUID();
 
 /** Loads a viewer by user id (active users only). Used for MCP calls, which carry a user id instead of a cookie. */
-export async function loadViewer(db: D1Database, userId: string): Promise<Viewer | null> {
-  const u = await db.prepare("SELECT * FROM users WHERE id = ? AND status = 'active'").bind(userId).first<UserRow>();
+export async function loadViewer(env: Env, userId: string): Promise<Viewer | null> {
+  const u = await env.DB.prepare("SELECT * FROM users WHERE id = ? AND status = 'active'").bind(userId).first<UserRow>();
   if (!u) return null;
-  return { id: u.id, email: u.email, name: u.name, role: u.role, projects: u.role === 'admin' ? [] : await memberProjects(db, u.id) };
+  return toViewer(env, u, validTz(u.time_zone) || defaultTz(env));
 }
+export const toViewer = async (env: Env, u: UserRow, tz: string): Promise<Viewer> => ({
+  id: u.id, email: u.email, name: u.name, role: u.role, projects: u.role === 'admin' ? [] : await memberProjects(env.DB, u.id), tz,
+});
 
 export const canSeeProject = (v: Viewer, projectId: string) => v.role === 'admin' || v.projects.includes(projectId);
 
@@ -85,11 +102,11 @@ export const mapTask = (r: TaskRow): Task => ({
 
 export interface UserRow {
   id: string; email: string; name: string; avatar_url: string | null; color: string; role: 'admin' | 'member';
-  status: 'invited' | 'active' | 'removed'; added_by: string | null; added_at: string; last_seen_at: string | null;
+  status: 'invited' | 'active' | 'removed'; added_by: string | null; added_at: string; last_seen_at: string | null; time_zone: string | null;
 }
 export const mapUser = (r: UserRow, projects: string[]): User => ({
   id: r.id, email: r.email, name: r.name || r.email.split('@')[0], avatarUrl: r.avatar_url, color: r.color, role: r.role,
-  status: r.status, projects: r.role === 'admin' ? [] : projects, addedAt: r.added_at,
+  status: r.status, projects: r.role === 'admin' ? [] : projects, addedAt: r.added_at, timeZone: r.time_zone,
 });
 
 export interface ProjectRow { id: string; name: string; color: string; description: string; archived: number; created_at: string }

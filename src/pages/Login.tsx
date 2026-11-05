@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { I } from '../components/ui';
+import { LogoMark } from '../components/ui';
 
 const GLOGO = (
   <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -38,7 +38,7 @@ export function Login() {
     <div className="app">
       <div className="signin">
         <div className="si-card">
-          <div className="logo-mark">{I.check(22)}</div>
+          <LogoMark big />
           <h1>Taskivities</h1>
           <p>Your team's week, at a glance.</p>
           {error === 'no_access' && (
